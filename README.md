@@ -1,5 +1,7 @@
 # Investment Analysis System 📈
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
 A Python-based investment analysis system that fetches financial data, performs fundamental analysis, and provides investment insights using quantitative metrics like CROCI (Cash Return on Capital Invested).
 
 ## 🚀 Features
@@ -138,7 +140,17 @@ The system calculates **Cash Return on Capital Invested** using:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the GNU Affero General Public License v3.0 - see the LICENSE file for details.
+
+### 🔒 License Compliance
+
+If you use this software:
+- **For personal use**: You're free to use, modify, and study the code
+- **If you distribute or modify**: You must provide source code under AGPL-3.0
+- **If you run as a web service**: You must provide source code to users (AGPL Section 13)
+- **Commercial use**: Allowed, but modifications must remain open source
+
+For questions about licensing or commercial exceptions, please open an issue or contact via LinkedIn.
 
 ## 📧 Contact
 
