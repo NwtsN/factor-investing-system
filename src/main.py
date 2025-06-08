@@ -55,37 +55,70 @@ def main() -> None:
         exit(1)
 
     session_id = str(uuid.uuid4())
-    print(f"[INFO] Starting session {session_id}")
+    print(f"[INFO] Starting intelligent data fetch session {session_id}")
 
     with DatabaseManager() as db:
         logger = db.get_logger(session_id)
-        fetcher = DataFetcher(logger=logger)
-
-        success_count = 0
-        fail_count = 0
-        cached_data = {}  # Store raw API responses for later insertion
-
-        for i, ticker in enumerate(TICKERS):
-            logger.log("Main", f"Fetching fundamentals for {ticker}", level="INFO")
-            success, fundamentals, raw_data = fetcher.fetch_fundamentals(ticker, api_key=api_key)
-            if success:
-                success_count += 1
-                cached_data[ticker] = {
-                    'fundamentals': fundamentals,
-                    'raw_api_data': raw_data
-                }
-            else:
-                fail_count += 1
-
-            # Alpha Vantage free plan = 5 requests per minute
-            if (i + 1) % 5 == 0:
-                logger.log("Main", "Sleeping 60s to avoid Alpha Vantage rate limit", level="INFO")
-                time.sleep(60)
-
-        logger.log("Main", f"Session complete: {success_count} successful, {fail_count} failed", level="INFO")
-        logger.log("Main", f"Cached data available for {len(cached_data)} tickers", level="INFO")
+        data_manager = DataManager(db.conn, logger)
         
-        # TODO: Later implement DataInserter to process cached_data
+        # Step 1: Analyze data freshness
+        print("[INFO] Analyzing data freshness...")
+        freshness_report = data_manager.get_data_freshness_report(TICKERS)
+        
+        logger.log("Main", f"Data freshness analysis: {freshness_report['summary']}", level="INFO")
+        print(f"  Total tickers: {freshness_report['total_tickers']}")
+        print(f"  Never fetched: {freshness_report['summary']['never_fetched_count']}")
+        print(f"  Fresh data (< 30 days): {freshness_report['summary']['fresh_count']}")
+        print(f"  Stale data (30-180 days): {freshness_report['summary']['stale_count']}")
+        print(f"  Very old data (> 180 days): {freshness_report['summary']['very_old_count']}")
+        
+        # Step 2: Smart fetching with DataManager
+        with DataFetcher(logger, data_manager, api_key) as fetcher:
+            print("[INFO] Starting intelligent fetch process...")
+            
+            # This automatically skips tickers with recent data!
+            results = fetcher.fetch_multiple_tickers(TICKERS)
+            
+            # Report results
+            print(f"[INFO] Fetch Results:")
+            print(f"  Total requested: {results['total_requested']}")
+            print(f"  Actually fetched: {results['total_fetched']}")
+            print(f"  Skipped (recent data): {results['total_skipped']}")
+            print(f"  Failed: {len(results['failed_fetches'])}")
+            print(f"  API calls made: {results['api_calls_made']}")
+            
+            api_calls_saved = results['total_skipped'] * 4  # 4 endpoints per ticker
+            print(f"  API calls saved: {api_calls_saved}")
+            
+            # Log detailed results
+            if results['successful_fetches']:
+                logger.log("Main", f"Successfully fetched: {results['successful_fetches']}", level="INFO")
+            
+            if results['skipped_tickers']:
+                logger.log("Main", f"Skipped tickers (recent data): {results['skipped_tickers']}", level="INFO")
+            
+            if results['failed_fetches']:
+                logger.log("Main", f"Failed tickers: {results['failed_fetches']}", level="WARNING")
+        
+        # Step 3: Get staged data for database insertion
+        staged_data = data_manager.get_staged_data()
+        print(f"[INFO] {len(staged_data)} tickers staged for database insertion")
+        
+        if staged_data:
+            for ticker in staged_data:
+                ticker_data = staged_data[ticker]
+                logger.log("Main", 
+                          f"{ticker}: Staged with {len(ticker_data['fundamentals'])} fields", 
+                          level="INFO")
+            
+            logger.log("Main", f"Session complete: {len(staged_data)} tickers ready for database insertion", level="INFO")
+        else:
+            print("[INFO] No new data to insert - all tickers have recent data")
+            logger.log("Main", "Session complete: No new data fetched (all tickers current)", level="INFO")
+        
+        # TODO: Later implement DataInserter to process staged_data
+        # After successful insertion, clear staging cache:
+        # data_manager.clear_staged_data()
 
 if __name__ == "__main__":
     main()
