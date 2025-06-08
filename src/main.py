@@ -43,6 +43,10 @@ def load_config() -> dict:
         exit(1)
 
 def main() -> None:
+    """
+    Intelligent data fetching with DataManager integration.
+    Automatically checks database and skips tickers with recent data.
+    """
     config = load_config()
     api_key = config.get("api_keys", {}).get("alpha_vantage")
 
