@@ -770,20 +770,24 @@ class DataFetcher:
                 eps_values.append(eps)
             return eps_values
 
+        # Calculate working capital with safety checks
+        total_current_assets = safe_get(balance_q, 0, "totalCurrentAssets")
+        total_current_liabilities = safe_get(balance_q, 0, "totalCurrentLiabilities")
+        working_capital = total_current_assets - total_current_liabilities if not np.isnan(total_current_assets) and not np.isnan(total_current_liabilities) else np.nan
 
         fundamentals = {
             "ticker": ticker,
             "market_cap": np.nan,  # to be filled via price fetcher
-            "total_debt": safe_get(balance_a[0], "totalLiabilities"),
-            "cash_equiv": safe_get(balance_a[0], "cashAndCashEquivalentsAtCarryingValue"),
-            "ebitda": safe_get(income_a[0], "ebitda"),
+            "total_debt": safe_get(balance_a, 0, "totalLiabilities"),
+            "cash_equiv": safe_get(balance_a, 0, "cashAndCashEquivalentsAtCarryingValue"),
+            "ebitda": safe_get(income_a, 0, "ebitda"),
             "eps_last_5_qs": extract_eps_list(earnings_last5_qs),
-            "cash_flow_ops": safe_get(cash_q[0], "operatingCashflow"),
-            "change_in_working_capital": safe_get(cash_q[0], "changeInWorkingCapital"),
-            "interest_expense": safe_get(income_q[0], "interestExpense"),
-            "total_assets": safe_get(balance_q[0], "totalAssets"),
-            "working_capital": safe_get(balance_q[0], "totalCurrentAssets") - safe_get(balance_q[0], "totalCurrentLiabilities"),
-            "gross_assets": safe_get(balance_q[0], "totalAssets")  # proxy for now
+            "cash_flow_ops": safe_get(cash_q, 0, "operatingCashflow"),
+            "change_in_working_capital": safe_get(cash_q, 0, "changeInWorkingCapital"),
+            "interest_expense": safe_get(income_q, 0, "interestExpense"),
+            "total_assets": safe_get(balance_q, 0, "totalAssets"),
+            "working_capital": working_capital,
+            "gross_assets": safe_get(balance_q, 0, "totalAssets")  # proxy for now
         }
 
         return fundamentals
