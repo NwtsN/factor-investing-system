@@ -155,4 +155,4 @@ For questions about licensing or commercial exceptions, please open an issue or 
 ## 📧 Contact
 
 Message me on Linkedin at (https://www.linkedin.com/in/nwtsn/)
-Project Link: [https://github.com/NwtsN/invsys](https://github.com/NwtsN/invsys) 
+Project Link: [https://github.com/NwtsN/factor-investing-system](https://github.com/NwtsN/factor-investing-system) 
