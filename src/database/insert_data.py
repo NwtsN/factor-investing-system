@@ -511,13 +511,19 @@ class DataFetcher:
         Fetches and parses fundamental data for a given ticker.
         Returns a tuple: (success, cleaned_fundamentals_dict, raw_api_data)
         """
+        # Use instance API key if not provided
+        used_api_key = api_key or self.api_key
+        if not used_api_key:
+            self.logger.log("API Key", f"{ticker}: No API key provided", level="ERROR")
+            self.failed_tickers.add(ticker)
+            return False, {}, {}
 
         # Define endpoints
         endpoints = {
-            "INCOME_STATEMENT": f"https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol={ticker}&apikey={api_key}",
-            "BALANCE_SHEET": f"https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol={ticker}&apikey={api_key}",
-            "CASH_FLOW": f"https://www.alphavantage.co/query?function=CASH_FLOW&symbol={ticker}&apikey={api_key}",
-            "Earnings": f"https://www.alphavantage.co/query?function=EARNINGS&symbol={ticker}&apikey={api_key}",
+            "INCOME_STATEMENT": f"https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol={ticker}&apikey={used_api_key}",
+            "BALANCE_SHEET": f"https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol={ticker}&apikey={used_api_key}",
+            "CASH_FLOW": f"https://www.alphavantage.co/query?function=CASH_FLOW&symbol={ticker}&apikey={used_api_key}",
+            "Earnings": f"https://www.alphavantage.co/query?function=EARNINGS&symbol={ticker}&apikey={used_api_key}",
         }
 
         raw_data = {}
