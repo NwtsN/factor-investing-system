@@ -134,6 +134,7 @@ class DataFetcher:
                 self.failed_tickers.add(ticker)
                 return False, {}, {}
             raw_data[label] = json_data
+            self.api_calls_made += 1
 
         # Step 2: Parse relevant fields
         try:
@@ -151,9 +152,13 @@ class DataFetcher:
                           f"{ticker}: extracted {len(fundamentals)} fields", 
                           level="INFO")
             return True, fundamentals, raw_data
+            
         except Exception as e:
-            self.logger.log("Fundamentals", f"{ticker}: parsing error - {e}", level="ERROR")
-            self.failed_tickers.append(ticker)
+            self.logger.log("Fundamentals", 
+                          f"{ticker}: parsing error - {e}", 
+                          level="ERROR")
+            self.failed_tickers.add(ticker)
+            self._adjust_backoff(False)
             return False, {}, {}
 
     def _enforce_rate_limit(self) -> None:
@@ -310,6 +315,18 @@ class DataFetcher:
         
         return True
 
+    def _log_session_metrics(self, duration: timedelta) -> None:
+        """Log comprehensive session metrics."""
+        metrics = {
+            "duration_seconds": duration.total_seconds(),
+            "successful_fetches": self.success_count,
+            "failed_tickers": len(self.failed_tickers),
+            "api_calls_made": self.api_calls_made
+        }
+        
+        self.logger.log("DataFetcher Metrics", 
+                       f"Session completed: {json.dumps(metrics)}", 
+                       level="INFO")
 
     def _extract_fundamentals(self, ticker: str, raw_data: dict) -> dict:
         """
@@ -368,12 +385,25 @@ class DataFetcher:
         }
 
         return fundamentals
-
-class DataManager:
-    """this class should be able to query raw_api_responses for each ticker's last timestamp, 
-    Compare that to the expected next report date (e.g., quarterly earnings calendar), 
-    Flag stale or outdated tickers"""
-    def __init__(self) -> None:
-        self.session_id: str = str(uuid.uuid4())
+    
+    def get_performance_metrics(self) -> dict:
+        """Get current performance metrics."""
+        return {
+            "successful_fetches": self.success_count,
+            "failed_tickers": len(self.failed_tickers),
+            "api_calls_made": self.api_calls_made,
+            "current_backoff_multiplier": self.current_backoff
+        }
+    
+    def get_failed_tickers(self) -> List[str]:
+        """Get list of tickers that failed to fetch."""
+        return list(self.failed_tickers)
+    
+    def reset_metrics(self) -> None:
+        """Reset performance metrics."""
+        self.success_count = 0
+        self.api_calls_made = 0
+        self.failed_tickers.clear()
+        self.current_backoff = 1.0
 
 
