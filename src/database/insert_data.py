@@ -38,7 +38,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from utils.logging import Logger
 from config import DB_PATH
 
+
 class DataInserter:
+    """Handles insertion of fetched data into the database."""
     def __init__(self) -> None:
         self.session_id: str = str(uuid.uuid4())
         self.db_path: str = DB_PATH
