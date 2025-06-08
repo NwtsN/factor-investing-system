@@ -128,6 +128,7 @@ class DataFetcher:
 
         # Step 1: Fetch and validate all endpoints
         for label, url in endpoints.items():
+            self._enforce_rate_limit()
             json_data = self._fetch_with_retry(ticker, label, url)
             if json_data is None:
                 self.failed_tickers.append(ticker)
@@ -143,6 +144,76 @@ class DataFetcher:
             self.logger.log("Fundamentals", f"{ticker}: parsing error - {e}", level="ERROR")
             self.failed_tickers.append(ticker)
             return False, {}, {}
+
+    def _enforce_rate_limit(self) -> None:
+        """Intelligent rate limiting with exponential backoff."""
+        if self.last_api_call is None:
+            self.last_api_call = datetime.now(timezone.utc)
+            return
+            
+        time_since_last = (datetime.now(timezone.utc) - self.last_api_call).total_seconds()
+        required_wait = self.min_interval_seconds * self.current_backoff
+        
+        if time_since_last < required_wait:
+            sleep_time = required_wait - time_since_last
+            self.logger.log("RateLimit", 
+                          f"Sleeping {sleep_time:.1f}s (backoff: {self.current_backoff:.1f}x)", 
+                          level="INFO")
+            time.sleep(sleep_time)
+        
+        self.last_api_call = datetime.now(timezone.utc)
+
+    def _adjust_backoff(self, success: bool) -> None:
+        """Adjust backoff based on success/failure."""
+        if success:
+            # Reset to normal on success
+            if self.current_backoff > 1.0:
+                self.logger.log("RateLimit", 
+                              f"Resetting backoff from {self.current_backoff:.1f}x to 1.0x after success", 
+                              level="INFO")
+            self.current_backoff = 1.0
+        else:
+            # Double backoff on failure, up to max
+            old_backoff = self.current_backoff
+            self.current_backoff = min(self.max_backoff, self.current_backoff * 2.0)
+            if self.current_backoff != old_backoff:
+                self.logger.log("RateLimit", 
+                              f"Increasing backoff from {old_backoff:.1f}x to {self.current_backoff:.1f}x after failure", 
+                              level="WARNING")
+
+    def _validate_data_quality(self, ticker: str, fundamentals: dict) -> bool:
+        """Comprehensive data quality validation."""
+        # Check minimum required fields
+        non_nan_fields = sum(1 for key, value in fundamentals.items() 
+                           if key != 'ticker' and not (isinstance(value, float) and np.isnan(value)))
+        
+        if non_nan_fields < self.min_required_fields:
+            self.logger.log("DataQuality", 
+                          f"{ticker}: Insufficient data quality - only {non_nan_fields} valid fields", 
+                          level="WARNING")
+            return False
+        
+        # Additional business logic validations
+        validations = [
+            ("total_assets", lambda x: x > 0, "Total assets should be positive"),
+            ("eps_last_5_qs", lambda x: isinstance(x, list) and len(x) >= 1, "Need at least 1 quarter of EPS data")
+        ]
+        
+        for field, validator, message in validations:
+            if field in fundamentals:
+                try:
+                    if not validator(fundamentals[field]):
+                        self.logger.log("DataQuality", 
+                                      f"{ticker}: {message}", 
+                                      level="WARNING")
+                        return False
+                except Exception as e:
+                    self.logger.log("DataQuality", 
+                                  f"{ticker}: Validation error for {field}: {e}", 
+                                  level="WARNING")
+                    continue  # Skip this validation but don't fail entirely
+        
+        return True
 
     def _fetch_with_retry(self, ticker: str, label: str, url: str) -> Optional[dict]:
         for attempt in range(2):
