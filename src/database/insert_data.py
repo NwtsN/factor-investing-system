@@ -439,7 +439,74 @@ class DataFetcher:
         self.logger.log("DataFetcher", "Session started", level="INFO")
         return self
 
-    def fetch_fundamentals(self, ticker: str, api_key: str) -> tuple[bool, dict, dict]:
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Context manager exit with cleanup and metrics logging."""
+        self.close()
+        if self.fetch_start_time:
+            duration = datetime.now(timezone.utc) - self.fetch_start_time
+            self._log_session_metrics(duration)
+
+    def close(self) -> None:
+        """Clean up resources."""
+        if self.session:
+            self.session.close()
+            self.session = None
+        self.logger.log("DataFetcher", "Session closed and resources cleaned up", level="INFO")
+
+    def fetch_multiple_tickers(self, ticker_list: List[str], force_refresh: bool = False) -> Dict[str, Any]:
+        """
+        Intelligently fetch data for multiple tickers, skipping those with recent data.
+        Requires DataManager to be initialized.
+        
+        Args:
+            ticker_list: List of ticker symbols to fetch
+            force_refresh: If True, fetch all tickers regardless of last fetch date
+            
+        Returns:
+            Dict with fetch results and summary
+        """
+        if not self.data_manager:
+            raise ValueError("DataManager required for batch operations")
+            
+        if force_refresh:
+            tickers_to_fetch = ticker_list
+            tickers_skipped = []
+            self.logger.log("DataFetcher", "Force refresh requested - fetching all tickers", level="INFO")
+        else:
+            tickers_to_fetch, tickers_skipped = self.data_manager.get_tickers_needing_update(ticker_list)
+        
+        results = {
+            'successful_fetches': [],
+            'failed_fetches': [],
+            'skipped_tickers': tickers_skipped,
+            'total_requested': len(ticker_list),
+            'total_fetched': 0,
+            'total_skipped': len(tickers_skipped),
+            'api_calls_made': 0
+        }
+        
+        # Fetch data for tickers that need updating
+        for ticker in tickers_to_fetch:
+            success, fundamentals, raw_data = self.fetch_fundamentals(ticker)
+            
+            if success:
+                # Stage the data with DataManager instead of local caching
+                self.data_manager.stage_data(ticker, fundamentals, raw_data)
+                results['successful_fetches'].append(ticker)
+            else:
+                results['failed_fetches'].append(ticker)
+        
+        results['total_fetched'] = len(results['successful_fetches'])
+        results['api_calls_made'] = self.api_calls_made
+        
+        self.logger.log("DataFetcher", 
+                       f"Batch fetch complete: {results['total_fetched']} successful, "
+                       f"{len(results['failed_fetches'])} failed, {results['total_skipped']} skipped", 
+                       level="INFO")
+        
+        return results
+
+    def fetch_fundamentals(self, ticker: str, api_key: str = None) -> tuple[bool, dict, dict]:
         """
         Fetches and parses fundamental data for a given ticker.
         Returns a tuple: (success, cleaned_fundamentals_dict, raw_api_data)
