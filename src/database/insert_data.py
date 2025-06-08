@@ -138,7 +138,18 @@ class DataFetcher:
         # Step 2: Parse relevant fields
         try:
             fundamentals = self._extract_fundamentals(ticker, raw_data)
-            self.logger.log("Fundamentals", f"{ticker}: extracted {len(fundamentals)} fields", level="INFO")
+            
+            # Data quality validation
+            if not self._validate_data_quality(ticker, fundamentals):
+                self.failed_tickers.add(ticker)
+                return False, {}, {}
+            
+            self.success_count += 1
+            self._adjust_backoff(True)
+            
+            self.logger.log("Fundamentals", 
+                          f"{ticker}: extracted {len(fundamentals)} fields", 
+                          level="INFO")
             return True, fundamentals, raw_data
         except Exception as e:
             self.logger.log("Fundamentals", f"{ticker}: parsing error - {e}", level="ERROR")
@@ -312,13 +323,17 @@ class DataFetcher:
         cash_a = raw_data["CASH_FLOW"].get("annualReports", [])
         earnings_last5_qs = raw_data["Earnings"].get("quarterlyEarnings", [])[:5]
 
-        if not (income_q and income_a and balance_q and balance_a and cash_q and cash_a and earnings_last5_qs):
-            raise ValueError("Missing one or more report sets.")
+        # Check if we have at least some data
+        if not any([income_q, income_a, balance_q, balance_a, cash_q, cash_a]):
+            raise ValueError("No report data available in any endpoint")
 
-        def safe_get(report, field):
+        def safe_get(report_list, index, field):
+            """Safely get a field from a report at given index."""
             try:
-                return float(report.get(field, np.nan))
-            except Exception:
+                if report_list and len(report_list) > index:
+                    return float(report_list[index].get(field, np.nan))
+                return np.nan
+            except (ValueError, TypeError):
                 return np.nan
             
         def extract_eps_list(earnings_list, count=5):
@@ -327,7 +342,7 @@ class DataFetcher:
             Returns a list of floats (or np.nan if parsing fails).
             """
             eps_values = []
-            for i in range(count):
+            for i in range(min(count, len(earnings_list))):  # Don't exceed available data
                 try:
                     eps_str = earnings_list[i].get("reportedEPS", "nan")
                     eps = float(eps_str)
