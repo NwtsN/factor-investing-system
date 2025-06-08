@@ -27,8 +27,10 @@ import uuid
 import sqlite3
 import requests
 import numpy as np
-from datetime import datetime, timezone
-from typing import Optional, Union
+from datetime import datetime, timezone, timedelta
+from typing import Optional, Union, Dict, Any, List
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Add parent directory to path for imports  
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -45,9 +47,68 @@ class DataInserter:
 
 
 class DataFetcher:
-    def __init__(self, logger: 'Logger') -> None:
+    """
+    Enhanced data fetcher that works with DataManager for intelligent fetching.
+    Uses database-driven caching and staging for database insertion.
+    
+    Can be used standalone (one ticker at a time) or with DataManager for batch operations.
+    """
+    
+    def __init__(self, logger: Logger, data_manager: DataManager = None, api_key: str = None) -> None:
         self.logger = logger
-        self.failed_tickers: list[str] = []
+        self.data_manager = data_manager  # Optional for standalone use
+        self.api_key = api_key
+        self.failed_tickers: set[str] = set()  # Use set to avoid duplicates
+        self.success_count: int = 0
+        self.api_calls_made: int = 0
+        self.fetch_start_time: Optional[datetime] = None
+        
+        # HTTP session with optimized settings
+        self.session: Optional[requests.Session] = None
+        self._setup_session()
+        
+        # Rate limiting state
+        self.last_api_call: Optional[datetime] = None
+        self.min_interval_seconds: float = 12.0  # Alpha Vantage: ~5 calls per minute
+        self.current_backoff: float = 1.0
+        self.max_backoff: float = 300.0  # 5 minutes max
+        
+        # Data quality thresholds
+        self.min_required_fields = 6  # Reduced from 8 for more flexibility
+        
+    def _setup_session(self) -> None:
+        """Configure HTTP session with retry strategy and connection pooling."""
+        self.session = requests.Session()
+        
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=3,
+            status_forcelist=[429, 500, 502, 503, 504],
+            backoff_factor=1,
+            respect_retry_after_header=True
+        )
+        
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=10,
+            pool_maxsize=20
+        )
+        
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+        
+        # Set common headers
+        self.session.headers.update({
+            'User-Agent': 'invsys/1.0 Financial Data Fetcher',
+            'Accept': 'application/json',
+            'Connection': 'keep-alive'
+        })
+
+    def __enter__(self):
+        """Context manager entry."""
+        self.fetch_start_time = datetime.now(timezone.utc)
+        self.logger.log("DataFetcher", "Session started", level="INFO")
+        return self
 
     def fetch_fundamentals(self, ticker: str, api_key: str) -> tuple[bool, dict, dict]:
         """
