@@ -131,7 +131,7 @@ class DataFetcher:
             self._enforce_rate_limit()
             json_data = self._fetch_with_retry(ticker, label, url)
             if json_data is None:
-                self.failed_tickers.append(ticker)
+                self.failed_tickers.add(ticker)
                 return False, {}, {}
             raw_data[label] = json_data
 
@@ -216,28 +216,88 @@ class DataFetcher:
         return True
 
     def _fetch_with_retry(self, ticker: str, label: str, url: str) -> Optional[dict]:
-        for attempt in range(2):
+        """Enhanced fetch with retry logic and better error handling."""
+        for attempt in range(3):  # Increased to 3 attempts
             try:
-                response = requests.get(url, timeout=10)
+                response = self.session.get(url, timeout=15)  # Increased timeout
+                
                 if response.status_code == 200:
                     json_data = response.json()
-                    # Very basic structure check
-                    if "annualReports" in json_data or "quarterlyReports" in json_data:
+                    
+                    # Enhanced structure validation
+                    if self._validate_api_response(json_data, label):
                         preview = str(json_data)[:60]
-                        self.logger.log(f"API:{label}", f"{ticker} - Success on attempt {attempt+1}. Preview: {preview}", level="INFO")
+                        self.logger.log(f"API:{label}", 
+                                      f"{ticker} - Success on attempt {attempt+1}. Preview: {preview}", 
+                                      level="INFO")
                         return json_data
                     else:
-                        raise ValueError("Unexpected JSON structure.")
+                        raise ValueError("Invalid API response structure")
+                        
+                elif response.status_code == 401:
+                    # Invalid API key - don't retry
+                    self.logger.log(f"API:{label}", 
+                                  f"{ticker} - Invalid API key (401)", 
+                                  level="ERROR")
+                    return None
+                    
+                elif response.status_code == 403:
+                    # Forbidden - don't retry
+                    self.logger.log(f"API:{label}", 
+                                  f"{ticker} - Access forbidden (403)", 
+                                  level="ERROR")
+                    return None
+                    
                 elif response.status_code == 429:
-                    self.logger.log(f"API:{label}", f"{ticker} - Rate limit hit, sleeping 60s", level="WARNING")
-                    time.sleep(60)
+                    wait_time = min(60 * (2 ** attempt), 300)  # Exponential backoff up to 5 minutes
+                    self.logger.log(f"API:{label}", 
+                                  f"{ticker} - Rate limit hit, sleeping {wait_time}s", 
+                                  level="WARNING")
+                    time.sleep(wait_time)
+                    continue
+                    
+                elif response.status_code >= 500:
+                    # Server error - retry with backoff
+                    wait_time = min(5 * (2 ** attempt), 30)
+                    self.logger.log(f"API:{label}", 
+                                  f"{ticker} - Server error {response.status_code}, waiting {wait_time}s", 
+                                  level="WARNING")
+                    if attempt < 2:
+                        time.sleep(wait_time)
+                    continue
+                    
                 else:
-                    raise Exception(f"Status code {response.status_code}")
+                    raise Exception(f"HTTP {response.status_code}: {response.text[:100]}")
+                    
             except Exception as e:
-                self.logger.log(f"API:{label}", f"{ticker} - Attempt {attempt+1} failed: {e}", level="WARNING")
-                time.sleep(5)
+                wait_time = min(5 * (2 ** attempt), 30)  # Exponential backoff for retries
+                self.logger.log(f"API:{label}", 
+                              f"{ticker} - Attempt {attempt+1} failed: {e}. Waiting {wait_time}s", 
+                              level="WARNING")
+                if attempt < 2:  # Don't sleep on the last attempt
+                    time.sleep(wait_time)
+                    
         return None
 
+    def _validate_api_response(self, json_data: dict, endpoint_type: str) -> bool:
+        """Enhanced API response validation."""
+        if not isinstance(json_data, dict):
+            return False
+            
+        # Check for API error messages
+        if "Error Message" in json_data or "Note" in json_data:
+            return False
+            
+        # Endpoint-specific validation
+        if endpoint_type in ["INCOME_STATEMENT", "BALANCE_SHEET", "CASH_FLOW"]:
+            return ("annualReports" in json_data and "quarterlyReports" in json_data and
+                    len(json_data.get("annualReports", [])) > 0 and
+                    len(json_data.get("quarterlyReports", [])) > 0)
+        elif endpoint_type == "Earnings":
+            return ("quarterlyEarnings" in json_data and 
+                    len(json_data.get("quarterlyEarnings", [])) >= 5)
+        
+        return True
 
 
     def _extract_fundamentals(self, ticker: str, raw_data: dict) -> dict:
