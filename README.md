@@ -70,8 +70,10 @@ invsys/
 │   ├── main.py                 # Entry point
 │   ├── config.py               # Centralized configuration
 │   ├── database/
-│   │   ├── database_setup.py   # Database initialization
-│   │   └── insert_data.py      # Data fetching & processing
+│   │   ├── database_handler.py   # Data freshness & staging management
+│   │   ├── database_setup.py     # Database initialization & schema
+│   │   ├── data_inserter.py      # Database insertion operations
+│   │   └── fetch_data.py         # Data fetching & processing
 │   ├── utils/
 │   │   └── logging.py          # Logging utilities
 │   ├── analysis/               # Analysis modules (future)
