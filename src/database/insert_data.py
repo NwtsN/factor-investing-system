@@ -23,8 +23,6 @@ import os
 import sys
 import time
 import json
-import uuid
-import sqlite3
 import requests
 import numpy as np
 from datetime import datetime, timezone, timedelta
@@ -36,19 +34,7 @@ from urllib3.util.retry import Retry
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.logging import Logger
-from config import DB_PATH
 from database.database_handler import DataManager
-
-
-class DataInserter:
-    """Handles insertion of fetched data into the database."""
-    def __init__(self, logger: Logger, db_path: str = None) -> None:
-        self.logger = logger
-        self.session_id: str = str(uuid.uuid4())
-        self.db_path: str = db_path or DB_PATH
-        self.conn: sqlite3.Connection = sqlite3.connect(self.db_path)
-        self.cursor: sqlite3.Cursor = self.conn.cursor()
-        # TODO: Implement data insertion methods
 
 
 class DataFetcher:
