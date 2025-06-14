@@ -88,7 +88,6 @@ class DataManager:
             return
             
         current_time = datetime.now(timezone.utc)
-        expired_tickers = []
         
         # Remove expired entries
         expired_tickers = [
@@ -107,7 +106,7 @@ class DataManager:
         if expired_tickers:
             remaining_count = len(self.staging_cache)
             self.logger.log("DataManager", 
-                          f"Cleared expired staging data for {ticker}", 
+                          f"Cleanup complete: {remaining_count} entries remaining in staging cache", 
                           level="INFO")
     
     def force_cleanup_staging_data(self) -> int:
