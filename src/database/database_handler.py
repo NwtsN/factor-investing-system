@@ -132,50 +132,45 @@ class DataManager:
     def _get_last_fetch_info(self, ticker: str) -> Optional[Dict[str, Any]]:
         """Get the last fetch information for a ticker from the database."""
         try:
-            # Query the raw_api_responses table for the most recent fetch
+            # Simple query without JOIN - much more reliable
             query = """
             SELECT 
                 ticker,
-                MAX(created_at) as last_fetch_date,
-                COUNT(DISTINCT endpoint_type) as endpoint_count
+                MAX(date_fetched) as last_fetch_date
             FROM raw_api_responses 
-            WHERE ticker = ? AND endpoint_type IN ('INCOME_STATEMENT', 'BALANCE_SHEET', 'CASH_FLOW', 'Earnings')
+            WHERE ticker = ? AND http_status_code = 200
             GROUP BY ticker
             """
             
             self.cursor.execute(query, (ticker,))
             result = self.cursor.fetchone()
             
-            if result and result[2] == 4:  # Only consider complete fetches with all 4 endpoints
+            if result and result[1]:  # Check if we have a result and a valid date
                 try:
                     # Handle different date formats
                     date_str = result[1]
-                    if date_str:
-                        # Try ISO format first, then other common formats
-                        for fmt in [None, '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f']:
-                            try:
-                                if fmt is None:
-                                    last_fetch_date = datetime.fromisoformat(date_str)
-                                else:
-                                    last_fetch_date = datetime.strptime(date_str, fmt)
-                                # Ensure timezone aware
-                                if last_fetch_date.tzinfo is None:
-                                    last_fetch_date = last_fetch_date.replace(tzinfo=timezone.utc)
-                                break
-                            except ValueError:
-                                continue
-                        else:
-                            self.logger.log("DataManager", 
-                                          f"Could not parse date format: {date_str}", 
-                                          level="WARNING")
-                            return None
+                    # Try ISO format first, then other common formats
+                    for fmt in [None, '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d']:
+                        try:
+                            if fmt is None:
+                                last_fetch_date = datetime.fromisoformat(date_str)
+                            else:
+                                last_fetch_date = datetime.strptime(date_str, fmt)
+                            # Ensure timezone aware
+                            if last_fetch_date.tzinfo is None:
+                                last_fetch_date = last_fetch_date.replace(tzinfo=timezone.utc)
+                            break
+                        except ValueError:
+                            continue
                     else:
-                        last_fetch_date = None
+                        self.logger.log("DataManager", 
+                                      f"Could not parse date format: {date_str}", 
+                                      level="WARNING")
+                        return None
                         
                     return {
                         'ticker': result[0],
-                        'last_fetch_date': last_fetch_date,
-                        'endpoint_count': result[2]
+                        'last_fetch_date': last_fetch_date
                     }
                 except Exception as e:
                     self.logger.log("DataManager", 
