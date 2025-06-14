@@ -77,7 +77,8 @@ class DatabaseManager:
 
     def _ensure_tables_exist(self):
         required_tables = [
-            "stocks", "fundamental_data", "price_data", "technical_indicators",
+            "stocks", "fundamental_data", "extracted_fundamental_data", "eps_last_5_qs",
+            "price_data", "technical_indicators",
             "risk_metrics", "scoring_system", "portfolio_allocation",
             "price_prediction_results", "risk_management", "portfolio_performance",
             "logs", "raw_api_responses"
