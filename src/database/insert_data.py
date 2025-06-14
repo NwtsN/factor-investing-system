@@ -454,14 +454,19 @@ class DataFetcher:
         # calculate effective tax rate
         ite = safe_get(income_q, 0, "incomeTaxExpense")
         ibt = safe_get(income_q, 0, "incomeBeforeTax")
-        effective_tax_rate = ite / ibt
-        statutory_US_rate, loss_tax_rate = 0.21, 0.00
-        # clean up effective tax rate
-        etr_clean = np.where(
-            ibt > 0,
-            np.where(ite >= 0, effective_tax_rate, statutory_US_rate),
-            np.where(ite > 0, loss_tax_rate, statutory_US_rate) 
-        )
+        
+        # Calculate effective tax rate with proper handling
+        if np.isnan(ite) or np.isnan(ibt) or ibt == 0:
+            etr_clean = 0.21  # Default to statutory rate
+        else:
+            effective_tax_rate = ite / ibt
+            statutory_US_rate, loss_tax_rate = 0.21, 0.00
+            
+            # Clean up effective tax rate based on conditions
+            if ibt > 0:
+                etr_clean = effective_tax_rate if ite >= 0 else statutory_US_rate
+            else:
+                etr_clean = loss_tax_rate if ite > 0 else statutory_US_rate
 
         fundamentals = {
             "ticker": ticker,
