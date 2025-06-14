@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS stocks (
 CREATE TABLE IF NOT EXISTS fundamental_data (
     fundamental_id INTEGER PRIMARY KEY AUTOINCREMENT,
     stock_id INTEGER NOT NULL,
-    date DATE NOT NULL,
+    fiscalDateEnding DATE NOT NULL,
+    calculated_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     market_cap FLOAT,
     ev_ebitda FLOAT,
     pe_ratio FLOAT,
@@ -21,7 +22,7 @@ CREATE TABLE IF NOT EXISTS fundamental_data (
     revenue_cagr FLOAT,
     dividend_growth_rate FLOAT,
     FOREIGN KEY(stock_id) REFERENCES stocks(stock_id),
-    UNIQUE(stock_id, date)
+    UNIQUE(stock_id, fiscalDateEnding)
 );
 
 CREATE TABLE IF NOT EXISTS extracted_fundamental_data (
@@ -81,7 +82,7 @@ CREATE TABLE IF NOT EXISTS raw_api_responses (
 );
 
 -- Indexes for performance optimization
-CREATE INDEX IF NOT EXISTS idx_fundamental_data_date ON fundamental_data(stock_id, date);
+CREATE INDEX IF NOT EXISTS idx_fundamental_data_fiscalDateEnding ON fundamental_data(stock_id, fiscalDateEnding);
 CREATE INDEX IF NOT EXISTS idx_extracted_fundamental_data_fiscalDateEnding ON extracted_fundamental_data(stock_id, fiscalDateEnding);
 CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_raw_api_responses_date_fetched ON raw_api_responses(stock_id, date_fetched);
