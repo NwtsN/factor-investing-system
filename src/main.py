@@ -28,7 +28,7 @@ import uuid
 sys.path.append(os.path.join(os.path.dirname(__file__)))
 
 from database.database_setup import DatabaseManager
-from database.insert_data import DataFetcher, DataManager
+from database.fetch_data import DataFetcher, DataManager
 from config import CONFIG_FILE_PATH
 
 # Optional: Load tickers from file or hardcode a few for testing
