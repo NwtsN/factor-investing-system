@@ -119,6 +119,12 @@ def main() -> None:
         # TODO: Later implement DataInserter to process staged_data
         # After successful insertion, clear staging cache:
         # data_manager.clear_staged_data()
+        
+        # Example implementation:
+        # with DataInserter(logger) as inserter:
+        #     insert_results = inserter.insert_staged_data(staged_data)
+        #     for ticker in insert_results['successful_inserts']:
+        #         data_manager.clear_staged_data(ticker)
 
 if __name__ == "__main__":
     main()
