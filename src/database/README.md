@@ -43,8 +43,16 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 - ✅ Intelligent freshness checking (avoids unnecessary API calls)
 - ✅ Configurable refresh policies (90 days min, 365 days force)
 - ✅ Quarterly report cycle awareness
-- ✅ In-memory staging cache with expiration (24 hours)
-- ✅ Comprehensive freshness reporting
+- ✅ In-memory staging cache with automatic expiration (24 hours)
+- ✅ Time-based cleanup every 5 minutes
+- ✅ Force cleanup option for immediate expiration
+- ✅ Cache status monitoring without side effects
+
+**Staging Cache Management:**
+- Data automatically expires after 24 hours
+- Cleanup runs every 5 minutes during normal operations
+- Can force immediate cleanup with `force_cleanup_staging_data()`
+- Check cache status with `get_staging_cache_status()`
 
 ### **3. DataInserter** (`data_inserter.py`)
 **Primary responsibility**: Insert staged data into database tables
@@ -192,6 +200,35 @@ data_manager.set_refresh_policy(
 self.min_required_fields = 6  # Minimum non-null fields required
 ```
 
+## 🗂️ **Managing Staging Cache**
+
+### **Monitor Cache Status**
+```python
+# Check cache status without triggering cleanup
+status = data_manager.get_staging_cache_status()
+print(f"Cache size: {status['size']} entries")
+print(f"Oldest entry: {status['oldest_entry_age_hours']} hours old")
+print(f"Next cleanup in: {status['next_cleanup_in_minutes']} minutes")
+```
+
+### **Manual Cache Management**
+```python
+# Force immediate cleanup of expired entries
+removed = data_manager.force_cleanup_staging_data()
+print(f"Removed {removed} expired entries")
+
+# Clear specific ticker after successful insertion
+data_manager.clear_staged_data('AAPL')
+
+# Clear all staged data
+data_manager.clear_staged_data()
+```
+
+### **Automatic Cleanup Behavior**
+- Expired data (>24 hours old) is automatically cleaned every 5 minutes
+- Cleanup runs when calling `stage_data()` or `get_staged_data()`
+- Empty cache doesn't trigger cleanup timer reset
+
 ## 🔍 **Data Quality & Validation**
 
 ### **Automatic Quality Checks**
@@ -318,7 +355,11 @@ print(f"Failed tickers: {fetcher.get_failed_tickers()}")
 - `get_tickers_needing_update(ticker_list)` → `(to_fetch, to_skip)`
 - `stage_data(ticker, fundamentals, raw_data)` → `None`
 - `get_staged_data()` → `Dict[ticker, data]`
+- `clear_staged_data(ticker=None)` → `None`
+- `force_cleanup_staging_data()` → `int` (number of expired entries removed)
+- `get_staging_cache_status()` → `Dict` (cache size, oldest entry age, next cleanup time)
 - `get_data_freshness_report(ticker_list)` → `report_dict`
+- `set_refresh_policy(min_days, force_days)` → `None`
 
 ### **DataInserter Methods**
 - `insert_staged_data(staged_data)` → `results_dict`
@@ -328,8 +369,7 @@ print(f"Failed tickers: {fetcher.get_failed_tickers()}")
 - **Demo API Key**: Limited to 5 calls per minute, 500 calls per day
 - **Production API Key**: Required for real-time usage
 - **SQLite Database**: Suitable for development, consider PostgreSQL for production
-- **Memory Usage**: Staging cache automatically expires after 24 hours
-- **Thread Safety**: Current implementation is single-threaded
+- **Memory Usage**: Staging cache automatically expires after 24 hours with cleanup every 5 minutes
 
 ## 📄 **License**
 
