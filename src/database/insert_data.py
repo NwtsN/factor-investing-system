@@ -42,9 +42,10 @@ from database.database_handler import DataManager
 
 class DataInserter:
     """Handles insertion of fetched data into the database."""
-    def __init__(self) -> None:
+    def __init__(self, logger: Logger, db_path: str = None) -> None:
+        self.logger = logger
         self.session_id: str = str(uuid.uuid4())
-        self.db_path: str = DB_PATH
+        self.db_path: str = db_path or DB_PATH
         self.conn: sqlite3.Connection = sqlite3.connect(self.db_path)
         self.cursor: sqlite3.Cursor = self.conn.cursor()
         # TODO: Implement data insertion methods
