@@ -450,19 +450,34 @@ class DataFetcher:
         total_current_liabilities = safe_get(balance_q, 0, "totalCurrentLiabilities")
         working_capital = total_current_assets - total_current_liabilities if not np.isnan(total_current_assets) and not np.isnan(total_current_liabilities) else np.nan
 
+        # calculate effective tax rate
+        ite = safe_get(income_q, 0, "incomeTaxExpense")
+        ibt = safe_get(income_q, 0, "incomeBeforeTax")
+        effective_tax_rate = ite / ibt
+        statutory_US_rate, loss_tax_rate = 0.21, 0.00
+        # clean up effective tax rate
+        etr_clean = np.where(
+            ibt > 0,
+            np.where(ite >= 0, effective_tax_rate, statutory_US_rate),
+            np.where(ite > 0, loss_tax_rate, statutory_US_rate) 
+        )
+
         fundamentals = {
             "ticker": ticker,
             "market_cap": np.nan,  # to be filled via price fetcher
-            "total_debt": safe_get(balance_a, 0, "totalLiabilities"),
-            "cash_equiv": safe_get(balance_a, 0, "cashAndCashEquivalentsAtCarryingValue"),
-            "ebitda": safe_get(income_a, 0, "ebitda"),
-            "eps_last_5_qs": extract_eps_list(earnings_last5_qs),
-            "cash_flow_ops": safe_get(cash_q, 0, "operatingCashflow"),
-            "change_in_working_capital": safe_get(cash_q, 0, "changeInWorkingCapital"),
-            "interest_expense": safe_get(income_q, 0, "interestExpense"),
-            "total_assets": safe_get(balance_q, 0, "totalAssets"),
-            "working_capital": working_capital,
-            "gross_assets": safe_get(balance_q, 0, "totalAssets")  # proxy for now
+            "total_debt": safe_get(balance_a, 0, "totalLiabilities"), # most recent annual balance sheet
+            "cash_equiv": safe_get(balance_a, 0, "cashAndCashEquivalentsAtCarryingValue"), # most recent annual balance sheet
+            "ebitda": safe_get(income_a, 0, "ebitda"), # most recent annual income statement
+            "eps_last_5_qs": extract_eps_list(earnings_last5_qs), # most recent 5 quarters of earnings
+            "cash_flow_ops": safe_get(cash_q, 0, "operatingCashflow"), # most recent quarterly operating cash flow
+            "change_in_working_capital": safe_get(cash_q, 0, "changeInWorkingCapital"), # QoQ change in working capital
+            "interest_expense": safe_get(income_q, 0, "interestExpense"), # most recent reported quarterly interest expense
+            "total_assets": safe_get(balance_q, 0, "totalAssets"), # most recent total assets (reported quarterly) - used for gross assets in CROCI calculation
+            "working_capital": working_capital, # most recent working capital (reported quarterly)
+            "effective_tax_rate": etr_clean, # AV does not offer ETR so we have to compute it with sensible fallbacks 
+            #in case of tax benefits on +ve earnings, company losing money and still paying tax, etc.
+            "longTermInvestments": safe_get(balance_q, 0, "longTermInvestments") # proxy for investments in associates in CROCI calculation - biasing calculation 
+            # downward to mitigate affect of hidden or under-reported capital
         }
 
         return fundamentals
