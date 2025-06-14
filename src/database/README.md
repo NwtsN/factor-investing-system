@@ -20,7 +20,7 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 
 ## 🔧 **Components**
 
-### **1. DataFetcher** (`insert_data.py`)
+### **1. DataFetcher** (`fetch_data.py`)
 **Primary responsibility**: Fetch and parse financial data from Alpha Vantage API
 
 **Key Features:**
@@ -46,7 +46,7 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 - ✅ In-memory staging cache with expiration (24 hours)
 - ✅ Comprehensive freshness reporting
 
-### **3. DataInserter** (`insert_data.py`)
+### **3. DataInserter** (`data_inserter.py`)
 **Primary responsibility**: Insert staged data into database tables
 
 **Key Features:**
@@ -87,7 +87,8 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 ```python
 from database.database_setup import DatabaseManager
 from database.database_handler import DataManager
-from database.insert_data import DataFetcher, DataInserter
+from database.fetch_data import DataFetcher
+from database.data_inserter import DataInserter
 import sqlite3
 import os
 
@@ -331,4 +332,15 @@ print(f"Failed tickers: {fetcher.get_failed_tickers()}")
 
 ## 📄 **License**
 
-GNU Affero General Public License v3.0 - See LICENSE file for details. 
+GNU Affero General Public License v3.0 - See LICENSE file for details.
+
+## 📁 **File Structure**
+
+```
+src/database/
+├── database_setup.py      # Database initialization and schema management
+├── database_handler.py    # DataManager class for freshness and staging
+├── fetch_data.py          # DataFetcher class for API data retrieval
+├── data_inserter.py       # DataInserter class for database insertion
+└── README.md             # This documentation
+``` 
