@@ -57,6 +57,10 @@ class DataManager:
         self.force_refresh_days = 365  # Force refresh after this many days regardless
         self.staging_cache_expiry_hours = 24  # Expire staged data after 24 hours
         
+        # Cleanup management
+        self.last_cleanup_time = datetime.now(timezone.utc)
+        self.cleanup_interval_minutes = 5  # Run cleanup every 5 minutes
+        
         # Clear any expired staging data on initialization
         self._clear_expired_staging_data()
         
@@ -71,25 +75,103 @@ class DataManager:
                           level="ERROR")
             return False
     
+    def _should_run_cleanup(self) -> bool:
+        """Check if it's time to run expired data cleanup."""
+        current_time = datetime.now(timezone.utc)
+        time_since_cleanup = current_time - self.last_cleanup_time
+        return time_since_cleanup >= timedelta(minutes=self.cleanup_interval_minutes)
+    
     def _clear_expired_staging_data(self) -> None:
         """Clear staging cache entries older than expiry threshold."""
         if not self.staging_cache:
+            # Don't update cleanup time if cache is empty
             return
             
         current_time = datetime.now(timezone.utc)
         expired_tickers = []
         
-        for ticker, data in self.staging_cache.items():
-            if 'fetch_timestamp' in data:
-                age = current_time - data['fetch_timestamp']
-                if age > timedelta(hours=self.staging_cache_expiry_hours):
-                    expired_tickers.append(ticker)
+        # Remove expired entries
+        expired_tickers = [
+            ticker for ticker, data in self.staging_cache.items()
+            if 'fetch_timestamp' in data and 
+            (current_time - data['fetch_timestamp']) > timedelta(hours=self.staging_cache_expiry_hours)
+        ]
         
         for ticker in expired_tickers:
             del self.staging_cache[ticker]
+        
+        # Always update cleanup time when we checked
+        self.last_cleanup_time = current_time
+        
+        # Only log what remains if we cleaned something
+        if expired_tickers:
+            remaining_count = len(self.staging_cache)
             self.logger.log("DataManager", 
                           f"Cleared expired staging data for {ticker}", 
                           level="INFO")
+    
+    def force_cleanup_staging_data(self) -> int:
+        """Force immediate cleanup of expired staging data, regardless of time interval.
+        
+        Returns:
+            int: Number of expired entries that were removed
+        """
+        if not self.staging_cache:
+            return 0
+            
+        current_time = datetime.now(timezone.utc)
+        
+        # Remove expired entries
+        expired_tickers = [
+            ticker for ticker, data in self.staging_cache.items()
+            if 'fetch_timestamp' in data and 
+            (current_time - data['fetch_timestamp']) > timedelta(hours=self.staging_cache_expiry_hours)
+        ]
+        
+        for ticker in expired_tickers:
+            del self.staging_cache[ticker]
+        
+        self.last_cleanup_time = current_time
+        
+        # Log what remains if we cleaned something
+        if expired_tickers:
+            remaining_count = len(self.staging_cache)
+            self.logger.log("DataManager", 
+                          f"Force cleanup complete: {remaining_count} entries remaining in staging cache", 
+                          level="INFO")
+        
+        return len(expired_tickers)
+    
+    def get_staging_cache_status(self) -> Dict[str, Any]:
+        """Get staging cache status without triggering cleanup.
+        
+        Returns:
+            dict: Cache status including size, oldest entry age, etc.
+        """
+        if not self.staging_cache:
+            return {
+                'size': 0,
+                'oldest_entry_age_hours': 0,
+                'next_cleanup_in_minutes': max(0, self.cleanup_interval_minutes - 
+                    (datetime.now(timezone.utc) - self.last_cleanup_time).total_seconds() / 60)
+            }
+        
+        current_time = datetime.now(timezone.utc)
+        oldest_age_hours = 0
+        
+        for data in self.staging_cache.values():
+            if 'fetch_timestamp' in data:
+                age_hours = (current_time - data['fetch_timestamp']).total_seconds() / 3600
+                oldest_age_hours = max(oldest_age_hours, age_hours)
+        
+        time_since_cleanup = (current_time - self.last_cleanup_time).total_seconds() / 60
+        next_cleanup_minutes = max(0, self.cleanup_interval_minutes - time_since_cleanup)
+        
+        return {
+            'size': len(self.staging_cache),
+            'oldest_entry_age_hours': round(oldest_age_hours, 2),
+            'next_cleanup_in_minutes': round(next_cleanup_minutes, 1)
+        }
     
     def get_tickers_needing_update(self, ticker_list: List[str]) -> tuple[List[str], List[str]]:
         """
@@ -259,13 +341,15 @@ class DataManager:
                        f"{ticker}: Data staged for insertion", 
                        level="INFO")
         
-        # Periodically clean expired entries
-        if len(self.staging_cache) % 10 == 0:
+        # Clean expired entries if enough time has passed
+        if self._should_run_cleanup():
             self._clear_expired_staging_data()
     
     def get_staged_data(self) -> Dict[str, Dict[str, Any]]:
         """Get all staged data ready for database insertion."""
-        self._clear_expired_staging_data()  # Clean before returning
+        # Only clean if enough time has passed, like in stage_data
+        if self._should_run_cleanup():
+            self._clear_expired_staging_data()
         return self.staging_cache.copy()
     
     def clear_staged_data(self, ticker: str = None) -> None:
