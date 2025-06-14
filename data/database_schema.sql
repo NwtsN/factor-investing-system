@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS extracted_fundamental_data (
     longTermInvestments FLOAT,
     api_name VARCHAR,
     FOREIGN KEY(stock_id) REFERENCES stocks(stock_id),
-    UNIQUE(stock_id, date, api_name)
+    UNIQUE(stock_id, fiscalDateEnding, api_name)
 ); 
 
 CREATE TABLE IF NOT EXISTS eps_last_5_qs (
@@ -71,16 +71,17 @@ CREATE TABLE IF NOT EXISTS logs (
 CREATE TABLE IF NOT EXISTS raw_api_responses (
     response_id INTEGER PRIMARY KEY AUTOINCREMENT,
     stock_id INTEGER NOT NULL,
+    ticker VARCHAR NOT NULL,
     date_fetched DATE NOT NULL,
     api_name VARCHAR,
     response JSON,
     http_status_code INTEGER,
     FOREIGN KEY(stock_id) REFERENCES stocks(stock_id),
-    UNIQUE(stock_id, date, api_name)
+    UNIQUE(stock_id, date_fetched, api_name)
 );
 
 -- Indexes for performance optimization
-CREATE INDEX IF NOT EXISTS idx_fundamental_data_fiscalDateEnding ON fundamental_data(stock_id,fiscalDateEnding);
+CREATE INDEX IF NOT EXISTS idx_fundamental_data_date ON fundamental_data(stock_id, date);
 CREATE INDEX IF NOT EXISTS idx_extracted_fundamental_data_fiscalDateEnding ON extracted_fundamental_data(stock_id, fiscalDateEnding);
 CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_raw_api_responses_date_fetched ON raw_api_responses(stock_id, date_fetched);
