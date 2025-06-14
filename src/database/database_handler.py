@@ -147,34 +147,17 @@ class DataManager:
             
             if result and result[1]:  # Check if we have a result and a valid date
                 try:
-                    # Handle different date formats
+                    # Since date_fetched is DATE type, it's always YYYY-MM-DD format
                     date_str = result[1]
-                    # Try ISO format first, then other common formats
-                    for fmt in [None, '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d']:
-                        try:
-                            if fmt is None:
-                                last_fetch_date = datetime.fromisoformat(date_str)
-                            else:
-                                last_fetch_date = datetime.strptime(date_str, fmt)
-                            # Ensure timezone aware
-                            if last_fetch_date.tzinfo is None:
-                                last_fetch_date = last_fetch_date.replace(tzinfo=timezone.utc)
-                            break
-                        except ValueError:
-                            continue
-                    else:
-                        self.logger.log("DataManager", 
-                                      f"Could not parse date format: {date_str}", 
-                                      level="WARNING")
-                        return None
+                    last_fetch_date = datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
                         
                     return {
                         'ticker': result[0],
                         'last_fetch_date': last_fetch_date
                     }
-                except Exception as e:
+                except ValueError as e:
                     self.logger.log("DataManager", 
-                                  f"Error parsing date for {ticker}: {e}", 
+                                  f"Unexpected date format for {ticker}: {date_str} - {e}", 
                                   level="ERROR")
                     return None
             else:
