@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS stocks (
     country TEXT
 );
 
--- 2. Fundamental Data Table
+-- 2. Fundamental Data Tables
 CREATE TABLE IF NOT EXISTS fundamental_data (
     fundamental_id INTEGER PRIMARY KEY AUTOINCREMENT,
     stock_id INTEGER NOT NULL,
@@ -100,32 +100,11 @@ CREATE TABLE IF NOT EXISTS price_prediction_results (
     UNIQUE(stock_id, forecast_date, model_type)
 );
 
--- 9. Risk Management Table
-CREATE TABLE IF NOT EXISTS risk_management (
-    risk_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    stock_id INTEGER NOT NULL,
-    strategy_date DATE NOT NULL,
-    stop_loss_level FLOAT,
-    take_profit_level FLOAT,
-    atr FLOAT,
-    FOREIGN KEY(stock_id) REFERENCES stocks(stock_id),
-    UNIQUE(stock_id, strategy_date)
-);
+-- 3. Price Data Table
 
--- 10. Portfolio Performance & Backtesting Table
-CREATE TABLE IF NOT EXISTS portfolio_performance (
-    performance_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    portfolio_date DATE NOT NULL,
-    portfolio_return FLOAT,
-    portfolio_volatility FLOAT,
-    sharpe_ratio FLOAT,
-    sortino_ratio FLOAT,
-    benchmark_return FLOAT,
-    benchmark VARCHAR,
-    UNIQUE(portfolio_date, benchmark)
-);
+-- 4. all other tables still to do...
 
--- 11. Log Table
+-- Logging table
 CREATE TABLE IF NOT EXISTS logs (
     log_id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id VARCHAR,
@@ -135,11 +114,11 @@ CREATE TABLE IF NOT EXISTS logs (
     message TEXT
 );
 
--- 12. Raw API Responses Table
+-- Raw API Responses Table
 CREATE TABLE IF NOT EXISTS raw_api_responses (
     response_id INTEGER PRIMARY KEY AUTOINCREMENT,
     stock_id INTEGER NOT NULL,
-    date DATE NOT NULL,
+    date_fetched DATE NOT NULL,
     api_name VARCHAR,
     response JSON,
     http_status_code INTEGER,
@@ -148,11 +127,7 @@ CREATE TABLE IF NOT EXISTS raw_api_responses (
 );
 
 -- Indexes for performance optimization
-CREATE INDEX IF NOT EXISTS idx_fundamental_data_stock_date ON fundamental_data(stock_id, date);
-CREATE INDEX IF NOT EXISTS idx_price_data_stock_date ON price_data(stock_id, date);
-CREATE INDEX IF NOT EXISTS idx_technical_indicators_stock_date ON technical_indicators(stock_id, date);
-CREATE INDEX IF NOT EXISTS idx_risk_metrics_stock_date ON risk_metrics(stock_id, date);
-CREATE INDEX IF NOT EXISTS idx_scoring_system_stock_date ON scoring_system(stock_id, date);
-CREATE INDEX IF NOT EXISTS idx_portfolio_allocation_stock_date ON portfolio_allocation(stock_id, allocation_date);
-CREATE INDEX IF NOT EXISTS idx_price_prediction_stock_date ON price_prediction_results(stock_id, forecast_date);
-CREATE INDEX IF NOT EXISTS idx_risk_management_stock_date ON risk_management(stock_id, strategy_date);
+CREATE INDEX IF NOT EXISTS idx_fundamental_data_fiscalDateEnding ON fundamental_data(stock_id,fiscalDateEnding);
+CREATE INDEX IF NOT EXISTS idx_extracted_fundamental_data_fiscalDateEnding ON extracted_fundamental_data(stock_id, fiscalDateEnding);
+CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_raw_api_responses_date_fetched ON raw_api_responses(stock_id, date_fetched);
