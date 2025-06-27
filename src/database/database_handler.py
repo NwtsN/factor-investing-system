@@ -211,16 +211,21 @@ class DataManager:
         return tickers_to_fetch, tickers_skipped
     
     def _get_last_fetch_info(self, ticker: str) -> Optional[Dict[str, Any]]:
-        """Get the last fetch information for a ticker from the database."""
+        """Get the last complete fetch information for a ticker"""
         try:
             # Simple query without JOIN - much more reliable
             query = """
-            SELECT 
-                ticker,
-                MAX(date_fetched) as last_fetch_date
-            FROM raw_api_responses 
-            WHERE ticker = ? AND http_status_code = 200
-            GROUP BY ticker
+            WITH complete_fetches AS (
+                SELECT date_fetched, COUNT(DISTINCT api_name) as endpoint_count
+                FROM raw_api_responses 
+                WHERE ticker = ? 
+                    AND http_status_code = 200
+                    AND api_name IN ('INCOME_STATEMENT', 'BALANCE_SHEET', 'CASH_FLOW', 'EARNINGS')
+                GROUP BY date_fetched
+                HAVING COUNT(DISTINCT api_name) = 4
+            )
+            SELECT MAX(date_fetched) as last_complete_fetch_date
+            FROM complete_fetches
             """
             
             self.cursor.execute(query, (ticker,))
