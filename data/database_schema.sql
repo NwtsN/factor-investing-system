@@ -40,9 +40,9 @@ CREATE TABLE IF NOT EXISTS extracted_fundamental_data (
     working_capital FLOAT,
     effective_tax_rate FLOAT,
     longTermInvestments FLOAT,
-    api_name VARCHAR,
+    data_source VARCHAR,
     FOREIGN KEY(stock_id) REFERENCES stocks(stock_id),
-    UNIQUE(stock_id, fiscalDateEnding, api_name)
+    UNIQUE(stock_id, fiscalDateEnding, data_source)
 ); 
 
 CREATE TABLE IF NOT EXISTS eps_last_5_qs (
@@ -74,11 +74,11 @@ CREATE TABLE IF NOT EXISTS raw_api_responses (
     stock_id INTEGER NOT NULL,
     ticker VARCHAR NOT NULL,
     date_fetched DATE NOT NULL,
-    api_name VARCHAR,
+    endpoint_key VARCHAR,
     response JSON,
     http_status_code INTEGER,
     FOREIGN KEY(stock_id) REFERENCES stocks(stock_id),
-    UNIQUE(stock_id, date_fetched, api_name)
+    UNIQUE(stock_id, date_fetched, endpoint_key)
 );
 
 -- Indexes for performance optimization

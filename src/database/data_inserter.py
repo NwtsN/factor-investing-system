@@ -134,7 +134,7 @@ class DataInserter:
             INSERT OR REPLACE INTO extracted_fundamental_data (
                 stock_id, fiscalDateEnding, market_cap, total_debt, cash_equiv, 
                 ebitda, cash_flow_ops, change_in_working_capital, interest_expense,
-                total_assets, working_capital, effective_tax_rate, longTermInvestments, api_name
+                total_assets, working_capital, effective_tax_rate, longTermInvestments, data_source
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             stock_id,
@@ -184,16 +184,16 @@ class DataInserter:
         ticker_result = self.cursor.fetchone()
         ticker = ticker_result[0] if ticker_result else "UNKNOWN"
         
-        for api_name, response_data in raw_data.items():
+        for endpoint_key, response_data in raw_data.items():
             self.cursor.execute("""
                 INSERT OR REPLACE INTO raw_api_responses (
-                    stock_id, ticker, date_fetched, api_name, response, http_status_code
+                    stock_id, ticker, date_fetched, endpoint_key, response, http_status_code
                 ) VALUES (?, ?, ?, ?, ?, ?)
             """, (
                 stock_id,
                 ticker,
                 fetch_date,
-                api_name,
+                endpoint_key,
                 json.dumps(response_data),
                 200  # Assuming successful responses
             )) 
