@@ -180,7 +180,7 @@ class DataFetcher:
             self.failed_tickers.add(ticker)
             return False, {}, {}
 
-        # Define endpoints
+        # Define endpoints (keys are local identifiers, not API function names)
         endpoints = {
             "INCOME_STATEMENT": f"https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol={ticker}&apikey={used_api_key}",
             "BALANCE_SHEET": f"https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol={ticker}&apikey={used_api_key}",

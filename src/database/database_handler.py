@@ -213,16 +213,16 @@ class DataManager:
     def _get_last_fetch_info(self, ticker: str) -> Optional[Dict[str, Any]]:
         """Get the last complete fetch information for a ticker"""
         try:
-            # Simple query without JOIN - much more reliable
+            # Query for dates where all 4 endpoints exist - ensures completeness
             query = """
             WITH complete_fetches AS (
-                SELECT date_fetched, COUNT(DISTINCT api_name) as endpoint_count
+                SELECT date_fetched
                 FROM raw_api_responses 
                 WHERE ticker = ? 
                     AND http_status_code = 200
-                    AND api_name IN ('INCOME_STATEMENT', 'BALANCE_SHEET', 'CASH_FLOW', 'EARNINGS')
+                    AND endpoint_key IN ('INCOME_STATEMENT', 'BALANCE_SHEET', 'CASH_FLOW', 'Earnings')
                 GROUP BY date_fetched
-                HAVING COUNT(DISTINCT api_name) = 4
+                HAVING COUNT(DISTINCT endpoint_key) = 4
             )
             SELECT MAX(date_fetched) as last_complete_fetch_date
             FROM complete_fetches
@@ -231,14 +231,14 @@ class DataManager:
             self.cursor.execute(query, (ticker,))
             result = self.cursor.fetchone()
             
-            if result and result[1]:  # Check if we have a result and a valid date
+            if result and result[0]:  # Check if we have a result and a valid date
                 try:
                     # Since date_fetched is DATE type, it's always YYYY-MM-DD format
-                    date_str = result[1]
+                    date_str = result[0]
                     last_fetch_date = datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
                         
                     return {
-                        'ticker': result[0],
+                        'ticker': ticker,
                         'last_fetch_date': last_fetch_date
                     }
                 except ValueError as e:
