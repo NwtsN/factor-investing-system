@@ -80,7 +80,7 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 |-------|---------|------------|
 | `stocks` | Master ticker registry | `stock_id`, `ticker`, `company_name` |
 | `fundamental_data` | Calculated financial ratios and metrics | `stock_id`, `fiscalDateEnding`, `calculated_timestamp`, `market_cap`, `ev_ebitda`, `pe_ratio`, `croci` |
-| `extracted_fundamental_data` | Raw financial data from API | `stock_id`, `fiscalDateEnding`, `market_cap`, `total_debt`, `ebitda` |
+| `extracted_fundamental_data` | Raw financial data from API | `stock_id`, `fiscalDateEnding`, `total_debt`, `cash_equiv`, `total_assets`, `ebitda_ttm`, `revenue_ttm`, `cash_flow_ops_ttm`, plus fallbacks |
 | `eps_last_5_qs` | Quarterly EPS history | `stock_id`, `fiscalDateEnding`, `reportedEPS` |
 | `raw_api_responses` | Complete API responses | `stock_id`, `ticker`, `date_fetched`, `api_name`, `response` |
 | `logs` | System logging | `session_id`, `timestamp`, `module`, `log_level`, `message` |
@@ -342,7 +342,6 @@ print(f"Failed tickers: {fetcher.get_failed_tickers()}")
 
 ## 🔮 **Future Enhancements**
 
-- [ ] Extract actual fiscal dates from API responses (currently using fetch timestamp)
 - [ ] Add company name fetching from Alpha Vantage overview
 - [ ] Implement parallel fetching with rate limiting
 - [ ] Add support for other data providers (Yahoo Finance, Quandl)
