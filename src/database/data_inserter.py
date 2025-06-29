@@ -122,35 +122,71 @@ class DataInserter:
     
     def _insert_extracted_fundamental_data(self, stock_id: int, fundamentals: dict, fetch_timestamp: datetime) -> None:
         """Insert extracted fundamental data."""
-        # For Alpha Vantage, the fiscal date should come from the most recent quarterly report
-        # This is a placeholder - in a real implementation, you'd pass the actual fiscal date
-        # from the API response (e.g., from balance sheet quarterly reports)
+        # Get the fiscal date from the fundamentals data
+        fiscal_date_str = fundamentals.get('fiscal_date_ending')
         
-        # Note: The actual fiscal date should be extracted from the raw_data in the calling method
-        # For now, using fetch timestamp as a fallback
-        fiscal_date = fetch_timestamp.date() if fetch_timestamp else datetime.now(timezone.utc).date()
+        if fiscal_date_str:
+            try:
+                # Parse the fiscal date string (format: YYYY-MM-DD)
+                fiscal_date = datetime.strptime(fiscal_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                self.logger.log("DataInserter", 
+                              f"Invalid fiscal date format: {fiscal_date_str}, using fetch timestamp", 
+                              level="WARNING")
+                fiscal_date = fetch_timestamp.date() if fetch_timestamp else datetime.now(timezone.utc).date()
+        else:
+            # Fallback to fetch timestamp if no fiscal date available
+            self.logger.log("DataInserter", 
+                          "No fiscal date in fundamentals, using fetch timestamp", 
+                          level="WARNING")
+            fiscal_date = fetch_timestamp.date() if fetch_timestamp else datetime.now(timezone.utc).date()
         
         # Insert or update extracted fundamental data
+        # Note: Storing both specific metrics (TTM, quarterly, annual) and legacy columns for compatibility
         self.cursor.execute("""
             INSERT OR REPLACE INTO extracted_fundamental_data (
-                stock_id, fiscalDateEnding, market_cap, total_debt, cash_equiv, 
-                ebitda, cash_flow_ops, change_in_working_capital, interest_expense,
-                total_assets, working_capital, effective_tax_rate, longTermInvestments, data_source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                stock_id, fiscalDateEnding, market_cap, 
+                -- Balance sheet items
+                total_debt, cash_equiv, total_assets, working_capital, longTermInvestments,
+                -- TTM metrics
+                ebitda_ttm, revenue_ttm, cash_flow_ops_ttm, interest_expense_ttm,
+                -- Quarterly metrics
+                cash_flow_ops_q, interest_expense_q, change_in_working_capital,
+                -- Annual fallbacks
+                ebitda_annual, total_debt_annual,
+                -- Legacy columns (for backward compatibility)
+                ebitda, cash_flow_ops, interest_expense,
+                -- Other
+                effective_tax_rate, data_source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             stock_id,
             fiscal_date,
             fundamentals.get('market_cap'),
+            # Balance sheet items
             fundamentals.get('total_debt'),
             fundamentals.get('cash_equiv'),
-            fundamentals.get('ebitda'),
-            fundamentals.get('cash_flow_ops'),
-            fundamentals.get('change_in_working_capital'),
-            fundamentals.get('interest_expense'),
             fundamentals.get('total_assets'),
             fundamentals.get('working_capital'),
-            fundamentals.get('effective_tax_rate'),
             fundamentals.get('longTermInvestments'),
+            # TTM metrics
+            fundamentals.get('ebitda_ttm'),
+            fundamentals.get('revenue_ttm'),
+            fundamentals.get('cash_flow_ops_ttm'),
+            fundamentals.get('interest_expense_ttm'),
+            # Quarterly metrics
+            fundamentals.get('cash_flow_ops_q'),
+            fundamentals.get('interest_expense_q'),
+            fundamentals.get('change_in_working_capital'),
+            # Annual fallbacks
+            fundamentals.get('ebitda_annual'),
+            fundamentals.get('total_debt_annual'),
+            # Legacy columns (populated with TTM or fallback values for compatibility)
+            fundamentals.get('ebitda_ttm') or fundamentals.get('ebitda_annual'),
+            fundamentals.get('cash_flow_ops_ttm') or fundamentals.get('cash_flow_ops_q'),
+            fundamentals.get('interest_expense_ttm') or fundamentals.get('interest_expense_q'),
+            # Other
+            fundamentals.get('effective_tax_rate'),
             'AlphaVantage'
         ))
     

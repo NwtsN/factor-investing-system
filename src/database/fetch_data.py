@@ -264,8 +264,16 @@ class DataFetcher:
     def _validate_data_quality(self, ticker: str, fundamentals: dict) -> bool:
         """Comprehensive data quality validation."""
         # Check minimum required fields
-        non_nan_fields = sum(1 for key, value in fundamentals.items() 
-                           if key != 'ticker' and not (isinstance(value, float) and np.isnan(value)))
+        non_nan_fields = 0
+        for key, value in fundamentals.items():
+            if key in ['ticker', 'fiscal_date_ending']:
+                continue  # Skip non-numeric fields
+            elif isinstance(value, list):
+                # For lists like eps_last_5_qs, count as valid if non-empty
+                if value:
+                    non_nan_fields += 1
+            elif not (isinstance(value, float) and np.isnan(value)):
+                non_nan_fields += 1
         
         if non_nan_fields < self.min_required_fields:
             self.logger.log("DataQuality", 
@@ -397,6 +405,7 @@ class DataFetcher:
     def _extract_fundamentals(self, ticker: str, raw_data: dict) -> dict:
         """
         Extracts and transforms relevant fields from raw Alpha Vantage response.
+        Uses quarterly data for most recent metrics and calculates rolling 4-quarter totals.
         """
         income_q = raw_data["INCOME_STATEMENT"].get("quarterlyReports", [])
         income_a = raw_data["INCOME_STATEMENT"].get("annualReports", [])
@@ -409,6 +418,17 @@ class DataFetcher:
         # Check if we have at least some data
         if not any([income_q, income_a, balance_q, balance_a, cash_q, cash_a]):
             raise ValueError("No report data available in any endpoint")
+        
+        # Get the most recent fiscal date from quarterly reports
+        fiscal_dates = []
+        for report_list in [income_q, balance_q, cash_q]:
+            if report_list and len(report_list) > 0:
+                date = report_list[0].get("fiscalDateEnding")
+                if date:  # Only add non-None dates
+                    fiscal_dates.append(date)
+        
+        # Use the most common fiscal date or the first available one
+        most_recent_fiscal_date = max(set(fiscal_dates), key=fiscal_dates.count) if fiscal_dates else None
 
         def safe_get(report_list, index, field):
             """Safely get a field from a report at given index."""
@@ -419,6 +439,20 @@ class DataFetcher:
             except (ValueError, TypeError):
                 return np.nan
             
+        def get_rolling_4q_sum(report_list, field, start_idx=0):
+            """Calculate rolling 4-quarter sum for flow metrics (income statement, cash flow)."""
+            try:
+                total = 0.0
+                count = 0
+                for i in range(start_idx, min(start_idx + 4, len(report_list))):
+                    value = safe_get(report_list, i, field)
+                    if not np.isnan(value):
+                        total += value
+                        count += 1
+                return total if count == 4 else np.nan  # Only return if we have all 4 quarters
+            except Exception:
+                return np.nan
+            
         def extract_eps_list(earnings_list, count=5):
             """
             Extracts the most recent 'count' EPS data from Alpha Vantage's EARNINGS endpoint.
@@ -427,17 +461,21 @@ class DataFetcher:
             """
             eps_data = []
             for i in range(min(count, len(earnings_list))):  # Don't exceed available data
+                fiscal_date = None
+                eps_str = "nan"
+                eps_value = np.nan
+                
                 try:
                     fiscal_date = earnings_list[i].get("fiscalDateEnding")
                     eps_str = earnings_list[i].get("reportedEPS", "nan")
                     eps_value = float(eps_str)
                 except Exception:
-                    eps_value = np.nan
-                    fiscal_date = None
+                    # Values already set to defaults above
+                    pass
                 
                 eps_data.append({
                     'fiscalDateEnding': fiscal_date,
-                    'reportedEPS': eps_str if 'eps_str' in locals() else "nan",
+                    'reportedEPS': eps_str,
                     'eps_value': eps_value  # For easy access in calculations
                 })
             return eps_data
@@ -466,21 +504,39 @@ class DataFetcher:
 
         fundamentals = {
             "ticker": ticker,
+            "fiscal_date_ending": most_recent_fiscal_date,  # Most recent quarterly report date
             "market_cap": np.nan,  # to be filled via price fetcher
-            "total_debt": safe_get(balance_a, 0, "totalLiabilities"), # most recent annual balance sheet
-            "cash_equiv": safe_get(balance_a, 0, "cashAndCashEquivalentsAtCarryingValue"), # most recent annual balance sheet
-            "ebitda": safe_get(income_a, 0, "ebitda"), # most recent annual income statement
-            "eps_last_5_qs": extract_eps_list(earnings_last5_qs), # List of dicts with fiscalDateEnding, reportedEPS, and eps_value
+            
+            # Balance Sheet items (point-in-time, use most recent quarter)
+            "total_debt": safe_get(balance_q, 0, "totalLiabilities"),  # Total liabilities from most recent quarter
+            "cash_equiv": safe_get(balance_q, 0, "cashAndCashEquivalentsAtCarryingValue"),  # Cash from most recent quarter
+            "total_assets": safe_get(balance_q, 0, "totalAssets"),  # Total assets from most recent quarter
+            "working_capital": working_capital,  # Current assets - current liabilities
+            "longTermInvestments": safe_get(balance_q, 0, "longTermInvestments"),  # Long-term investments
+            
+            # Income Statement items (flow metrics, use rolling 4-quarter totals)
+            "ebitda_ttm": get_rolling_4q_sum(income_q, "ebitda"),  # Trailing twelve months EBITDA
+            "revenue_ttm": get_rolling_4q_sum(income_q, "totalRevenue"),  # TTM revenue
+            "interest_expense_ttm": get_rolling_4q_sum(income_q, "interestExpense"),  # TTM interest expense
+            
+            # Cash Flow items (flow metrics, use rolling 4-quarter totals)
+            "cash_flow_ops_ttm": get_rolling_4q_sum(cash_q, "operatingCashflow"),  # TTM operating cash flow
+            
+            # Quarterly items (for rate calculations and recent changes)
+            "cash_flow_ops_q": safe_get(cash_q, 0, "operatingCashflow"),  # Most recent quarter OCF
+            "change_in_working_capital": safe_get(cash_q, 0, "changeInWorkingCapital"),  # QoQ change
+            "interest_expense_q": safe_get(income_q, 0, "interestExpense"),  # Most recent quarter interest
+            
+            # Calculated metrics
+            "effective_tax_rate": etr_clean,  # Calculated from most recent quarter
+            
+            # EPS data with dates
+            "eps_last_5_qs": extract_eps_list(earnings_last5_qs),  # List of dicts with fiscalDateEnding and values
             # To get just EPS values for calculations: [item['eps_value'] for item in fundamentals['eps_last_5_qs']]
-            "cash_flow_ops": safe_get(cash_q, 0, "operatingCashflow"), # most recent quarterly operating cash flow
-            "change_in_working_capital": safe_get(cash_q, 0, "changeInWorkingCapital"), # QoQ change in working capital
-            "interest_expense": safe_get(income_q, 0, "interestExpense"), # most recent reported quarterly interest expense
-            "total_assets": safe_get(balance_q, 0, "totalAssets"), # most recent total assets (reported quarterly) - used for gross assets in CROCI calculation
-            "working_capital": working_capital, # most recent working capital (reported quarterly)
-            "effective_tax_rate": etr_clean, # AV does not offer ETR so we have to compute it with sensible fallbacks 
-            #in case of tax benefits on +ve earnings, company losing money and still paying tax, etc.
-            "longTermInvestments": safe_get(balance_q, 0, "longTermInvestments") # proxy for investments in associates in CROCI calculation - biasing calculation 
-            # downward to mitigate affect of hidden or under-reported capital
+            
+            # Fallback to annual data if quarterly aggregation fails
+            "ebitda_annual": safe_get(income_a, 0, "ebitda") if np.isnan(get_rolling_4q_sum(income_q, "ebitda")) else np.nan,
+            "total_debt_annual": safe_get(balance_a, 0, "totalLiabilities") if np.isnan(safe_get(balance_q, 0, "totalLiabilities")) else np.nan
         }
 
         return fundamentals
