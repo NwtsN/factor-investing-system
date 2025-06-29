@@ -62,8 +62,10 @@ class DatabaseManager:
             # Try to log if possible, but ensure exception is raised
             try:
                 self._log("Database Initialisation", str(e), level="ERROR")
-            except:
+            except Exception as log_error:
+                # If logging fails, at least print both errors
                 print(f"[ERROR] Database Initialisation: {e}")
+                print(f"[ERROR] Failed to log error: {log_error}")
             raise
 
     def _execute_schema(self):
@@ -79,6 +81,7 @@ class DatabaseManager:
             self._log("Database Setup", "Schema applied successfully.", level="INFO")
         except Exception as e:
             self._log("Schema Execution", str(e), level="ERROR")
+            raise
 
     def _ensure_tables_exist(self):
         # Only check for tables that actually exist in the schema
@@ -99,6 +102,7 @@ class DatabaseManager:
                 self._log("Schema Check", "All required tables already exist.", level="INFO")
         except Exception as e:
             self._log("Schema Validation", str(e), level="ERROR")
+            raise
 
     def _clear_old_setup_logs(self):
         try:
@@ -107,6 +111,7 @@ class DatabaseManager:
             self._log("Logging Setup", "Old setup logs cleared.", level="INFO")
         except Exception as e:
             self._log("Logging Cleanup", str(e), level="ERROR")
+            # Don't raise here as this is just cleanup - log and continue
 
     def _log(self, module: str, message: str, level: str = "INFO") -> None:
         """Use internal Logger instance for setup logs."""
