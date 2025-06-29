@@ -198,6 +198,8 @@ Smart tax rate calculation with edge case handling:
 - Command line interface
 
 ### 🔄 In Progress
+- add company information to fetch stage
+- insert above company information into the database
 - Additional financial metrics calculations
 - Performance optimization for large ticker lists
 
