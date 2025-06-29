@@ -2,7 +2,7 @@
 
 ## 📋 **Overview**
 
-The database module provides a complete, intelligent pipeline for fetching, validating, and storing financial data from the Alpha Vantage API. It implements smart caching to avoid unnecessary API calls, maintains data freshness tracking, and provides robust error handling.
+The database module provides a complete, intelligent pipeline for fetching, validating, and storing financial data from the Alpha Vantage API. It implements smart caching to avoid unnecessary API calls, maintains data freshness tracking, provides robust error handling, and supports configurable transaction modes for database operations.
 
 ## 🏗️ **Architecture**
 
@@ -29,6 +29,8 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 - ✅ Data quality validation (minimum 10 valid fields)
 - ✅ Supports batch operations or standalone use
 - ✅ Extracts 17+ financial metrics from 4 API endpoints
+- ✅ Session-based performance tracking
+- ✅ HTTP connection pooling for efficiency
 
 **API Endpoints Used:**
 - `INCOME_STATEMENT` - Revenue, EBITDA, tax data
@@ -47,6 +49,7 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 - ✅ Time-based cleanup every 5 minutes
 - ✅ Force cleanup option for immediate expiration
 - ✅ Cache status monitoring without side effects
+- ✅ Session-based tracking with unique IDs
 
 **Staging Cache Management:**
 - Data automatically expires after 24 hours
@@ -58,10 +61,17 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 **Primary responsibility**: Insert staged data into database tables
 
 **Key Features:**
-- ✅ Transactional integrity (rollback on errors)
+- ✅ Transactional integrity with configurable modes
+- ✅ All-or-nothing transaction mode (default)
+- ✅ Individual commit mode for partial success
 - ✅ Automatic stock record creation
 - ✅ Handles multiple data types (fundamentals, EPS, raw responses)
 - ✅ Context manager support for automatic cleanup
+- ✅ Connection reuse for better performance
+
+**Transaction Modes:**
+- **all-or-nothing** (default): Single transaction for all tickers, rollback on any failure
+- **individual**: Each ticker committed separately, allowing partial success
 
 ### **4. DatabaseManager** (`database_setup.py`)
 **Primary responsibility**: Initialize database schema and provide logger instances
@@ -71,6 +81,7 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 - ✅ Table existence validation
 - ✅ Logger instance management
 - ✅ Database connection handling
+- ✅ Context manager support
 
 ## 🗄️ **Database Schema**
 
@@ -82,7 +93,7 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 | `fundamental_data` | Calculated financial ratios and metrics | `stock_id`, `fiscalDateEnding`, `calculated_timestamp`, `market_cap`, `ev_ebitda`, `pe_ratio`, `croci` |
 | `extracted_fundamental_data` | Raw financial data from API | `stock_id`, `fiscalDateEnding`, `total_debt`, `cash_equiv`, `total_assets`, `ebitda_ttm`, `revenue_ttm`, `cash_flow_ops_ttm`, plus fallbacks |
 | `eps_last_5_qs` | Quarterly EPS history | `stock_id`, `fiscalDateEnding`, `reportedEPS` |
-| `raw_api_responses` | Complete API responses | `stock_id`, `ticker`, `date_fetched`, `api_name`, `response` |
+| `raw_api_responses` | Complete API responses | `stock_id`, `ticker`, `date_fetched`, `endpoint_key`, `response`, `http_status_code`, `is_complete_session` |
 | `logs` | System logging | `session_id`, `timestamp`, `module`, `log_level`, `message` |
 
 ### **Relationships**
@@ -98,16 +109,15 @@ from database.database_setup import DatabaseManager
 from database.database_handler import DataManager
 from database.fetch_data import DataFetcher
 from database.data_inserter import DataInserter
-import sqlite3
-import os
 
-# Initialize database
-db_manager = DatabaseManager()
-logger = db_manager.get_logger("my_session_123")
-conn = sqlite3.connect("data/invsys_database.db")
-
-# Set your API key
-os.environ['ALPHA_VANTAGE_API_KEY'] = 'your_api_key_here'
+# Initialize database with context manager
+with DatabaseManager() as db_manager:
+    logger = db_manager.get_logger("my_session_123")
+    
+    # Use the existing connection
+    with DataManager(db_manager.conn, logger) as data_manager:
+        # Your data operations here
+        pass
 ```
 
 ### **2. Fetch Single Ticker (Standalone)**
@@ -127,34 +137,49 @@ with DataFetcher(logger, api_key=api_key) as fetcher:
 
 ### **3. Batch Fetch with Intelligence (Recommended)**
 ```python
-# Initialize components
-data_manager = DataManager(conn, logger)
-api_key = os.environ.get('ALPHA_VANTAGE_API_KEY', 'demo')
-
-with DataFetcher(logger, data_manager, api_key) as fetcher:
-    # Define tickers to fetch
-    tickers = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA']
+# Initialize components with existing connection
+with DatabaseManager() as db_manager:
+    logger = db_manager.get_logger("batch_session_456")
     
-    # Intelligent fetching (skips recent data)
-    results = fetcher.fetch_multiple_tickers(tickers, force_refresh=False)
-    
-    print(f"Successful: {results['successful_fetches']}")
-    print(f"Failed: {results['failed_fetches']}")
-    print(f"Skipped (recent): {results['skipped_tickers']}")
-    print(f"API calls made: {results['api_calls_made']}")
-    
-    # Insert fetched data
-    staged_data = data_manager.get_staged_data()
-    if staged_data:
-        with DataInserter(logger) as inserter:
-            insert_results = inserter.insert_staged_data(staged_data)
-            print(f"Inserted: {insert_results['successful_inserts']}")
+    with DataManager(db_manager.conn, logger) as data_manager:
+        api_key = os.environ.get('ALPHA_VANTAGE_API_KEY', 'demo')
+        
+        with DataFetcher(logger, data_manager, api_key) as fetcher:
+            # Define tickers to fetch
+            tickers = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA']
             
-            # Clear staging cache after successful insertion
-            for ticker in insert_results['successful_inserts']:
-                data_manager.clear_staged_data(ticker)
+            # Intelligent fetching (skips recent data)
+            results = fetcher.fetch_multiple_tickers(tickers, force_refresh=False)
+            
+            print(f"Successful: {results['successful_fetches']}")
+            print(f"Failed: {results['failed_fetches']}")
+            print(f"Skipped (recent): {results['skipped_tickers']}")
+            print(f"API calls made: {results['api_calls_made']}")
+            
+            # Insert fetched data with transaction mode
+            staged_data = data_manager.get_staged_data()
+            if staged_data:
+                # Use existing connection for DataInserter
+                with DataInserter(logger, connection=db_manager.conn) as inserter:
+                    # Choose transaction mode
+                    use_transaction = True  # or False for individual commits
+                    insert_results = inserter.insert_staged_data(staged_data, use_transaction=use_transaction)
+                    print(f"Inserted: {insert_results['successful_inserts']}")
+                    
+                    # Clear staging cache after successful insertion
+                    for ticker in insert_results['successful_inserts']:
+                        data_manager.clear_staged_data(ticker)
+```
 
-conn.close()
+### **4. Integration with Timeout**
+```python
+from utils.program_timer import Timeout
+
+# Set a 30-minute timeout for the entire operation
+with Timeout(minutes=30):
+    with DatabaseManager() as db_manager:
+        # Your data fetching and insertion operations
+        pass
 ```
 
 ## 📊 **Extracted Financial Metrics**
@@ -204,6 +229,13 @@ data_manager.set_refresh_policy(
 # DataFetcher quality validation (modify in __init__)
 self.min_required_fields = 10  # Minimum non-null fields required (59% of 17 fields)
 # Ensures core balance sheet, profitability, cash flow, and EPS data are present
+```
+
+### **Transaction Modes**
+```python
+# DataInserter transaction modes
+inserter.insert_staged_data(staged_data, use_transaction=True)   # All-or-nothing
+inserter.insert_staged_data(staged_data, use_transaction=False)  # Individual commits
 ```
 
 ## 🗂️ **Managing Staging Cache**
@@ -303,6 +335,11 @@ api_key = "your_key_here"
 - Ensure proper file permissions
 - Try reinitializing with `DatabaseManager()`
 
+**5. "Transaction rollback"**
+- Check logs for specific ticker that caused failure
+- Consider using individual commit mode for partial success
+- Validate ticker symbols before batch operations
+
 ### **Debugging Tips**
 
 **1. Enable Detailed Logging**
@@ -333,6 +370,7 @@ The system tracks and reports:
 - **API calls made vs tickers processed**
 - **Current backoff multiplier**
 - **Session duration and throughput**
+- **Transaction success rates**
 
 ```python
 metrics = fetcher.get_performance_metrics()
@@ -347,6 +385,8 @@ print(f"Failed tickers: {fetcher.get_failed_tickers()}")
 - [ ] Add support for other data providers (Yahoo Finance, Quandl)
 - [ ] Create data validation rules engine
 - [ ] Add automated retry queue for failed tickers
+- [ ] Support for incremental data updates
+- [ ] Database migration system for schema updates
 
 ## 📚 **API Reference**
 
@@ -367,7 +407,10 @@ print(f"Failed tickers: {fetcher.get_failed_tickers()}")
 - `set_refresh_policy(min_days, force_days)` → `None`
 
 ### **DataInserter Methods**
-- `insert_staged_data(staged_data)` → `results_dict`
+- `insert_staged_data(staged_data, use_transaction=True)` → `results_dict`
+
+### **DatabaseManager Methods**
+- `get_logger(session_id)` → `Logger`
 
 ## 📝 **Notes**
 
@@ -375,6 +418,7 @@ print(f"Failed tickers: {fetcher.get_failed_tickers()}")
 - **Production API Key**: Required for real-time usage
 - **SQLite Database**: Suitable for development, consider PostgreSQL for production
 - **Memory Usage**: Staging cache automatically expires after 24 hours with cleanup every 5 minutes
+- **Transaction Mode**: Default is all-or-nothing, use individual mode for fault tolerance
 
 ## 📄 **License**
 
@@ -384,6 +428,7 @@ GNU Affero General Public License v3.0 - See LICENSE file for details.
 
 ```
 src/database/
+├── __init__.py            # Module initialization
 ├── database_setup.py      # Database initialization and schema management
 ├── database_handler.py    # DataManager class for freshness and staging
 ├── fetch_data.py          # DataFetcher class for API data retrieval
