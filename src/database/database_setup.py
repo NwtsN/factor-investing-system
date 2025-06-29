@@ -59,7 +59,12 @@ class DatabaseManager:
             self._clear_old_setup_logs()
             self._log("Database Initialisation", "Setup complete.", level="INFO")
         except Exception as e:
-            self._log("Database Initialisation", str(e), level="ERROR")
+            # Try to log if possible, but ensure exception is raised
+            try:
+                self._log("Database Initialisation", str(e), level="ERROR")
+            except:
+                print(f"[ERROR] Database Initialisation: {e}")
+            raise
 
     def _execute_schema(self):
         try:
@@ -76,11 +81,9 @@ class DatabaseManager:
             self._log("Schema Execution", str(e), level="ERROR")
 
     def _ensure_tables_exist(self):
+        # Only check for tables that actually exist in the schema
         required_tables = [
             "stocks", "fundamental_data", "extracted_fundamental_data", "eps_last_5_qs",
-            "price_data", "technical_indicators",
-            "risk_metrics", "scoring_system", "portfolio_allocation",
-            "price_prediction_results", "risk_management", "portfolio_performance",
             "logs", "raw_api_responses"
         ]
 
@@ -118,10 +121,11 @@ class DatabaseManager:
     def close(self):
         try:
             if self.conn:
+                self._log("Database Manager", "Closing connection.", level="INFO")
                 self.conn.close()
-                self._log("Database Manager", "Connection closed.", level="INFO")
         except Exception as e:
-            self._log("Database Close", str(e), level="ERROR")
+            # Can't log to database after connection is closed
+            print(f"[ERROR] Database Close: {e}")
 
     def __enter__(self):
         """Enable use of 'with' statement."""
