@@ -213,19 +213,13 @@ class DataManager:
     def _get_last_fetch_info(self, ticker: str) -> Optional[Dict[str, Any]]:
         """Get the last complete fetch information for a ticker"""
         try:
-            # Query for dates where all 4 endpoints exist - ensures completeness
+            # Simple and efficient query using the completeness flag
             query = """
-            WITH complete_fetches AS (
-                SELECT date_fetched
-                FROM raw_api_responses 
-                WHERE ticker = ? 
-                    AND http_status_code = 200
-                    AND endpoint_key IN ('INCOME_STATEMENT', 'BALANCE_SHEET', 'CASH_FLOW', 'Earnings')
-                GROUP BY date_fetched
-                HAVING COUNT(DISTINCT endpoint_key) = 4
-            )
             SELECT MAX(date_fetched) as last_complete_fetch_date
-            FROM complete_fetches
+            FROM raw_api_responses 
+            WHERE ticker = ? 
+                AND http_status_code = 200
+                AND is_complete_session = TRUE
             """
             
             self.cursor.execute(query, (ticker,))
