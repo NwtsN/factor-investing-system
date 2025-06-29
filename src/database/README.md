@@ -26,9 +26,9 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 **Key Features:**
 - ✅ Intelligent rate limiting (12 seconds between calls, exponential backoff)
 - ✅ Retry logic with 3 attempts per endpoint
-- ✅ Data quality validation (minimum 6 valid fields)
+- ✅ Data quality validation (minimum 10 valid fields)
 - ✅ Supports batch operations or standalone use
-- ✅ Extracts 13+ financial metrics from 4 API endpoints
+- ✅ Extracts 17+ financial metrics from 4 API endpoints
 
 **API Endpoints Used:**
 - `INCOME_STATEMENT` - Revenue, EBITDA, tax data
@@ -159,22 +159,27 @@ conn.close()
 
 ## 📊 **Extracted Financial Metrics**
 
-The system extracts 13+ key financial metrics:
+The system extracts 17 key financial metrics:
 
 | Metric | Source | Description |
 |--------|--------|-------------|
 | `market_cap` | To be filled by price fetcher | Market capitalization |
-| `total_debt` | Balance Sheet (Annual) | Total liabilities |
-| `cash_equiv` | Balance Sheet (Annual) | Cash and cash equivalents |
-| `ebitda` | Income Statement (Annual) | Earnings before interest, taxes, depreciation, amortization |
-| `eps_last_5_qs` | Earnings endpoint | Last 5 quarters of reported EPS |
-| `cash_flow_ops` | Cash Flow (Quarterly) | Operating cash flow |
-| `change_in_working_capital` | Cash Flow (Quarterly) | Quarter-over-quarter working capital change |
-| `interest_expense` | Income Statement (Quarterly) | Interest expense |
-| `total_assets` | Balance Sheet (Quarterly) | Total assets (for CROCI calculation) |
+| `total_debt` | Balance Sheet (Quarterly) | Total liabilities |
+| `cash_equiv` | Balance Sheet (Quarterly) | Cash and cash equivalents |
+| `total_assets` | Balance Sheet (Quarterly) | Total assets |
 | `working_capital` | Calculated | Current assets - current liabilities |
-| `effective_tax_rate` | Calculated | Smart tax rate with fallbacks |
 | `longTermInvestments` | Balance Sheet (Quarterly) | Long-term investments |
+| `ebitda_ttm` | Income Statement (4Q Rolling) | Trailing twelve months EBITDA |
+| `revenue_ttm` | Income Statement (4Q Rolling) | Trailing twelve months revenue |
+| `interest_expense_ttm` | Income Statement (4Q Rolling) | Trailing twelve months interest expense |
+| `cash_flow_ops_ttm` | Cash Flow (4Q Rolling) | Trailing twelve months operating cash flow |
+| `cash_flow_ops_q` | Cash Flow (Quarterly) | Most recent quarter operating cash flow |
+| `change_in_working_capital` | Cash Flow (Quarterly) | Quarter-over-quarter working capital change |
+| `interest_expense_q` | Income Statement (Quarterly) | Most recent quarter interest expense |
+| `effective_tax_rate` | Calculated | Smart tax rate with fallbacks |
+| `eps_last_5_qs` | Earnings endpoint | Last 5 quarters of reported EPS |
+| `ebitda_annual` | Income Statement (Annual) | Annual EBITDA (fallback if quarterly unavailable) |
+| `total_debt_annual` | Balance Sheet (Annual) | Annual total liabilities (fallback if quarterly unavailable) |
 
 ## ⚙️ **Configuration Options**
 
@@ -197,7 +202,8 @@ data_manager.set_refresh_policy(
 ### **Data Quality Thresholds**
 ```python
 # DataFetcher quality validation (modify in __init__)
-self.min_required_fields = 6  # Minimum non-null fields required
+self.min_required_fields = 10  # Minimum non-null fields required (59% of 17 fields)
+# Ensures core balance sheet, profitability, cash flow, and EPS data are present
 ```
 
 ## 🗂️ **Managing Staging Cache**
@@ -232,7 +238,7 @@ data_manager.clear_staged_data()
 ## 🔍 **Data Quality & Validation**
 
 ### **Automatic Quality Checks**
-- ✅ Minimum 6 non-null fundamental fields
+- ✅ Minimum 10 non-null fundamental fields (59% of total)
 - ✅ Positive total assets validation
 - ✅ At least 1 quarter of EPS data required
 - ✅ API response structure validation
