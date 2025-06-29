@@ -44,7 +44,17 @@ TICKERS = ["AAPL", "MSFT", "GOOGL", "TSLA"]  # You can swap in your full S&P 500
 def load_config() -> dict:
     try:
         with open(CONFIG_FILE_PATH, 'r') as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+            if not isinstance(config, dict):
+                raise ValueError("Config file must contain a valid YAML dictionary")
+            return config
+    except FileNotFoundError:
+        print(f"[ERROR] Config file not found at {CONFIG_FILE_PATH}")
+        print("[HINT] Copy config/invsys_environment_template.yml to config/invsys_environment.yml and add your API key")
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        print(f"[ERROR] Invalid YAML in config file: {e}")
+        sys.exit(1)
     except Exception as e:
         print(f"[ERROR] Failed to load config file at {CONFIG_FILE_PATH}: {e}")
         sys.exit(1)
@@ -124,7 +134,8 @@ def main(args: argparse.Namespace) -> None:
     api_key = config.get("api_keys", {}).get("alpha_vantage")
 
     if not api_key or api_key.strip() == "" or api_key == "demo":
-        print("[ERROR] Valid API key not found in config (found: '{}').".format(api_key if api_key else "None"))
+        key_status = "empty" if not api_key or api_key.strip() == "" else "demo" if api_key == "demo" else "invalid"
+        print(f"[ERROR] Valid API key not found in config (status: {key_status})")
         sys.exit(1)
 
     session_id = str(uuid.uuid4())
@@ -185,7 +196,8 @@ def main(args: argparse.Namespace) -> None:
                 if staged_data:
                     # Check if we have enough time for database operations
                     # Ensure minimum estimate of 0.1 minutes to avoid edge cases
-                    estimated_db_time = max(0.1, len(staged_data) * 0.5)  # Estimate 0.5 minutes per ticker
+                    # Also ensure we handle empty staged_data gracefully
+                    estimated_db_time = max(0.1, len(staged_data) * 0.5) if staged_data else 0.1
                     if not check_timeout_safety(start_time, timeout_minutes, "database insertion", estimated_db_time):
                         logger.log("Main", "Skipping database insertion due to timeout risk", level="WARNING")
                         print("\n[WARNING] Staged data will remain in cache for next run")

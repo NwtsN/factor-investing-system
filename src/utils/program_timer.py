@@ -67,7 +67,8 @@ class Timeout:
         """Handle timeout by printing message and exiting."""
         print(f"\n[TIMEOUT] {self.message}")
         print(f"[INFO] Program execution limited to {self.minutes} minutes")
-        sys.exit(0)
+        # Exit with code 124 (standard timeout exit code) instead of 0 (success)
+        sys.exit(124)
         
     def start(self) -> None:
         """Start the timeout timer."""
@@ -108,6 +109,10 @@ class Timeout:
         if not self.active or self.start_time is None:
             return None
             
-        elapsed = time.time() - self.start_time
-        remaining = self.seconds - elapsed
-        return max(0.0, remaining) 
+        try:
+            elapsed = time.time() - self.start_time
+            remaining = self.seconds - elapsed
+            return max(0.0, remaining)
+        except (TypeError, AttributeError):
+            # Handle edge case where time calculation fails
+            return None 

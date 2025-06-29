@@ -177,6 +177,14 @@ class DataInserter:
     
     def _get_or_create_stock_id(self, ticker: str) -> int:
         """Get stock_id for ticker, creating stock record if necessary."""
+        # Validate ticker format (alphanumeric and common symbols only)
+        if not ticker or not ticker.replace('.', '').replace('-', '').isalnum():
+            raise ValueError(f"Invalid ticker format: {ticker}")
+        
+        # Validate ticker length (NYSE/NASDAQ tickers are typically 1-5 characters)
+        if len(ticker) > 10:
+            raise ValueError(f"Ticker too long (max 10 characters): {ticker}")
+        
         # Check if stock exists
         self.cursor.execute("SELECT stock_id FROM stocks WHERE ticker = ?", (ticker,))
         result = self.cursor.fetchone()
@@ -276,6 +284,13 @@ class DataInserter:
         """Insert EPS data for last 5 quarters using the structured eps_list."""
         # Use the eps_list which already contains fiscalDateEnding and reportedEPS
         # This avoids re-extracting from raw data and ensures consistency
+        
+        # Validate eps_list is actually a list
+        if not isinstance(eps_list, list):
+            self.logger.log("DataInserter", 
+                          f"Invalid eps_list type: expected list, got {type(eps_list)}", 
+                          level="WARNING")
+            return
         
         for eps_item in eps_list:
             fiscal_date = eps_item.get('fiscalDateEnding')

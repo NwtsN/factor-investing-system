@@ -359,7 +359,8 @@ class DataFetcher:
                     continue
                     
                 else:
-                    raise Exception(f"HTTP {response.status_code}: {response.text[:100]}")
+                    # Don't include response text in logs as it might contain sensitive data
+                    raise Exception(f"HTTP {response.status_code}: Unexpected status code")
                     
             except Exception as e:
                 wait_time = min(5 * (2 ** attempt), 30)  # Exponential backoff for retries
