@@ -24,6 +24,7 @@ import sys
 import json
 import uuid
 import sqlite3
+import numpy as np
 from datetime import datetime, timezone
 from typing import Dict, Any, List
 
@@ -153,25 +154,25 @@ class DataInserter:
             'AlphaVantage'
         ))
     
-    def _insert_eps_data(self, stock_id: int, eps_list: List[float], earnings_data: dict) -> None:
-        """Insert EPS data for last 5 quarters."""
-        quarterly_earnings = earnings_data.get('quarterlyEarnings', [])[:5]
+    def _insert_eps_data(self, stock_id: int, eps_list: List[Dict[str, Any]], earnings_data: dict) -> None:
+        """Insert EPS data for last 5 quarters using the structured eps_list."""
+        # Use the eps_list which already contains fiscalDateEnding and reportedEPS
+        # This avoids re-extracting from raw data and ensures consistency
         
-        for i, earnings_q in enumerate(quarterly_earnings):
-            fiscal_date = earnings_q.get('fiscalDateEnding')
-            reported_eps = earnings_q.get('reportedEPS')
+        for eps_item in eps_list:
+            fiscal_date = eps_item.get('fiscalDateEnding')
+            eps_value = eps_item.get('eps_value')  # Use the pre-parsed float value
             
-            if fiscal_date and reported_eps is not None:
+            if fiscal_date and not (isinstance(eps_value, float) and np.isnan(eps_value)):
                 try:
-                    eps_value = float(reported_eps)
                     self.cursor.execute("""
                         INSERT OR REPLACE INTO eps_last_5_qs (
                             stock_id, fiscalDateEnding, reportedEPS
                         ) VALUES (?, ?, ?)
                     """, (stock_id, fiscal_date, eps_value))
-                except ValueError:
+                except Exception as e:
                     self.logger.log("DataInserter", 
-                                  f"Invalid EPS value for {fiscal_date}: {reported_eps}", 
+                                  f"Error inserting EPS for {fiscal_date}: {e}", 
                                   level="WARNING")
     
     def _insert_raw_api_responses(self, stock_id: int, raw_data: dict, fetch_timestamp: datetime) -> None:
@@ -184,16 +185,19 @@ class DataInserter:
         ticker_result = self.cursor.fetchone()
         ticker = ticker_result[0] if ticker_result else "UNKNOWN"
         
+        # Since we only reach this point with complete data (all 4 endpoints),
+        # we can safely mark all rows as complete as by this point we have all 4 endpoints
         for endpoint_key, response_data in raw_data.items():
             self.cursor.execute("""
                 INSERT OR REPLACE INTO raw_api_responses (
-                    stock_id, ticker, date_fetched, endpoint_key, response, http_status_code
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    stock_id, ticker, date_fetched, endpoint_key, response, http_status_code, is_complete_session
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 stock_id,
                 ticker,
                 fetch_date,
                 endpoint_key,
                 json.dumps(response_data),
-                200  # Assuming successful responses
+                200,  # Assuming successful responses
+                True  # Always complete since DataFetcher is all-or-nothing
             )) 

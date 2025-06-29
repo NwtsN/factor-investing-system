@@ -276,7 +276,9 @@ class DataFetcher:
         # Additional business logic validations
         validations = [
             ("total_assets", lambda x: x > 0, "Total assets should be positive"),
-            ("eps_last_5_qs", lambda x: isinstance(x, list) and len(x) >= 1, "Need at least 1 quarter of EPS data")
+            ("eps_last_5_qs", lambda x: isinstance(x, list) and len(x) >= 1 and all(
+                isinstance(item, dict) and 'eps_value' in item for item in x
+            ), "Need at least 1 quarter of EPS data with proper structure")
         ]
         
         for field, validator, message in validations:
@@ -419,18 +421,26 @@ class DataFetcher:
             
         def extract_eps_list(earnings_list, count=5):
             """
-            Extracts the most recent 'count' diluted EPS values from Alpha Vantage's EARNINGS endpoint.
-            Returns a list of floats (or np.nan if parsing fails).
+            Extracts the most recent 'count' EPS data from Alpha Vantage's EARNINGS endpoint.
+            Returns a list of dicts containing fiscalDateEnding and reportedEPS.
+            Each dict also has an 'eps_value' property for easy access to just the numeric value.
             """
-            eps_values = []
+            eps_data = []
             for i in range(min(count, len(earnings_list))):  # Don't exceed available data
                 try:
+                    fiscal_date = earnings_list[i].get("fiscalDateEnding")
                     eps_str = earnings_list[i].get("reportedEPS", "nan")
-                    eps = float(eps_str)
+                    eps_value = float(eps_str)
                 except Exception:
-                    eps = np.nan
-                eps_values.append(eps)
-            return eps_values
+                    eps_value = np.nan
+                    fiscal_date = None
+                
+                eps_data.append({
+                    'fiscalDateEnding': fiscal_date,
+                    'reportedEPS': eps_str if 'eps_str' in locals() else "nan",
+                    'eps_value': eps_value  # For easy access in calculations
+                })
+            return eps_data
 
         # Calculate working capital with safety checks
         total_current_assets = safe_get(balance_q, 0, "totalCurrentAssets")
@@ -460,7 +470,8 @@ class DataFetcher:
             "total_debt": safe_get(balance_a, 0, "totalLiabilities"), # most recent annual balance sheet
             "cash_equiv": safe_get(balance_a, 0, "cashAndCashEquivalentsAtCarryingValue"), # most recent annual balance sheet
             "ebitda": safe_get(income_a, 0, "ebitda"), # most recent annual income statement
-            "eps_last_5_qs": extract_eps_list(earnings_last5_qs), # most recent 5 quarters of earnings
+            "eps_last_5_qs": extract_eps_list(earnings_last5_qs), # List of dicts with fiscalDateEnding, reportedEPS, and eps_value
+            # To get just EPS values for calculations: [item['eps_value'] for item in fundamentals['eps_last_5_qs']]
             "cash_flow_ops": safe_get(cash_q, 0, "operatingCashflow"), # most recent quarterly operating cash flow
             "change_in_working_capital": safe_get(cash_q, 0, "changeInWorkingCapital"), # QoQ change in working capital
             "interest_expense": safe_get(income_q, 0, "interestExpense"), # most recent reported quarterly interest expense

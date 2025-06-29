@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS raw_api_responses (
     endpoint_key VARCHAR,
     response JSON,
     http_status_code INTEGER,
+    is_complete_session BOOLEAN DEFAULT FALSE,  -- TRUE if all 4 endpoints succeeded for this date/ticker
     FOREIGN KEY(stock_id) REFERENCES stocks(stock_id),
     UNIQUE(stock_id, date_fetched, endpoint_key)
 );
