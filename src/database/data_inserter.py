@@ -327,5 +327,5 @@ class DataInserter:
                 endpoint_key,
                 json_data,
                 200,  # Assuming successful responses
-                True  # Always complete since DataFetcher is all-or-nothing
+                1  # Always complete since DataFetcher is all-or-nothing (1 = True in SQLite)
             )) 

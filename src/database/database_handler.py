@@ -45,7 +45,6 @@ class DataManager:
     
     def __init__(self, db_connection: sqlite3.Connection, logger: Logger) -> None:
         self.conn = db_connection
-        self.cursor = db_connection.cursor()
         self.logger = logger
         self.session_id = str(uuid.uuid4())
         
@@ -63,6 +62,55 @@ class DataManager:
         
         # Clear any expired staging data on initialization
         self._clear_expired_staging_data()
+        
+    def __enter__(self):
+        """Context manager entry."""
+        self.logger.log("DataManager", 
+                       f"Session started with ID: {self.session_id}", 
+                       level="INFO")
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Context manager exit with cleanup."""
+        self.close()
+        
+        # Log any exceptions that occurred
+        if exc_type:
+            self.logger.log("DataManager", 
+                          f"Session ended with exception: {exc_type.__name__}: {exc_value}", 
+                          level="ERROR")
+        else:
+            self.logger.log("DataManager", 
+                          "Session ended successfully", 
+                          level="INFO")
+    
+    def close(self) -> None:
+        """Clean up resources and log final metrics."""
+        # Force final cleanup of expired staging data
+        expired_count = self.force_cleanup_staging_data()
+        
+        if expired_count > 0:
+            self.logger.log("DataManager", 
+                          f"Cleaned up {expired_count} expired entries during close", 
+                          level="INFO")
+        
+        # Log final staging cache status
+        if self.staging_cache:
+            self.logger.log("DataManager", 
+                          f"Closing with {len(self.staging_cache)} entries remaining in staging cache", 
+                          level="WARNING")
+            # Log which tickers remain
+            remaining_tickers = list(self.staging_cache.keys())
+            self.logger.log("DataManager", 
+                          f"Remaining staged tickers: {remaining_tickers}", 
+                          level="INFO")
+        else:
+            self.logger.log("DataManager", 
+                          "Closing with empty staging cache", 
+                          level="INFO")
+        
+        # Note: We don't close the database connection since DataManager doesn't own it
+        # The connection is owned by DatabaseManager which will handle closing it
         
     def _validate_connection(self) -> bool:
         """Validate database connection is still alive."""
@@ -219,11 +267,13 @@ class DataManager:
             FROM raw_api_responses 
             WHERE ticker = ? 
                 AND http_status_code = 200
-                AND is_complete_session = TRUE
+                AND is_complete_session = 1
             """
             
-            self.cursor.execute(query, (ticker,))
-            result = self.cursor.fetchone()
+            cursor = self.conn.cursor()
+            cursor.execute(query, (ticker,))
+            result = cursor.fetchone()
+            cursor.close()
             
             if result and result[0]:  # Check if we have a result and a valid date
                 try:

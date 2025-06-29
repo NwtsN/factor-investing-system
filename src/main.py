@@ -137,126 +137,126 @@ def main(args: argparse.Namespace) -> None:
     with (timeout_context if timeout_context else contextlib.nullcontext()):
         with DatabaseManager() as db:
             logger = db.get_logger(session_id)
-            data_manager = DataManager(db.conn, logger)
             
-            # Step 1: Analyze data freshness
-            print("[INFO] Analyzing data freshness...")
-            freshness_report = data_manager.get_data_freshness_report(TICKERS)
-            
-            logger.log("Main", f"Data freshness analysis: {freshness_report['summary']}", level="INFO")
-            print(f"  Total tickers: {freshness_report['total_tickers']}")
-            print(f"  Never fetched: {freshness_report['summary']['never_fetched_count']}")
-            print(f"  Fresh data (< 30 days): {freshness_report['summary']['fresh_count']}")
-            print(f"  Stale data (30-180 days): {freshness_report['summary']['stale_count']}")
-            print(f"  Very old data (> 180 days): {freshness_report['summary']['very_old_count']}")
-            
-            # Step 2: Smart fetching with DataManager
-            with DataFetcher(logger, data_manager, api_key) as fetcher:
-                print("[INFO] Starting intelligent fetch process...")
+            with DataManager(db.conn, logger) as data_manager:
+                # Step 1: Analyze data freshness
+                print("[INFO] Analyzing data freshness...")
+                freshness_report = data_manager.get_data_freshness_report(TICKERS)
                 
-                # This automatically skips tickers with recent data!
-                results = fetcher.fetch_multiple_tickers(TICKERS)
+                logger.log("Main", f"Data freshness analysis: {freshness_report['summary']}", level="INFO")
+                print(f"  Total tickers: {freshness_report['total_tickers']}")
+                print(f"  Never fetched: {freshness_report['summary']['never_fetched_count']}")
+                print(f"  Fresh data (< 30 days): {freshness_report['summary']['fresh_count']}")
+                print(f"  Stale data (30-180 days): {freshness_report['summary']['stale_count']}")
+                print(f"  Very old data (> 180 days): {freshness_report['summary']['very_old_count']}")
                 
-                # Report results
-                print(f"\n[INFO] Fetch Results:")
-                print(f"  Total requested: {results['total_requested']}")
-                print(f"  Actually fetched: {results['total_fetched']}")
-                print(f"  Skipped (recent data): {results['total_skipped']}")
-                print(f"  Failed: {len(results['failed_fetches'])}")
-                print(f"  API calls made: {results['api_calls_made']}")
+                # Step 2: Smart fetching with DataManager
+                with DataFetcher(logger, data_manager, api_key) as fetcher:
+                    print("[INFO] Starting intelligent fetch process...")
+                    
+                    # This automatically skips tickers with recent data!
+                    results = fetcher.fetch_multiple_tickers(TICKERS)
+                    
+                    # Report results
+                    print(f"\n[INFO] Fetch Results:")
+                    print(f"  Total requested: {results['total_requested']}")
+                    print(f"  Actually fetched: {results['total_fetched']}")
+                    print(f"  Skipped (recent data): {results['total_skipped']}")
+                    print(f"  Failed: {len(results['failed_fetches'])}")
+                    print(f"  API calls made: {results['api_calls_made']}")
+                    
+                    api_calls_saved = results['total_skipped'] * 4  # 4 endpoints per ticker
+                    print(f"  API calls saved: {api_calls_saved}")
+                    
+                    # Log detailed results
+                    if results['successful_fetches']:
+                        logger.log("Main", f"Successfully fetched: {results['successful_fetches']}", level="INFO")
+                    
+                    if results['skipped_tickers']:
+                        logger.log("Main", f"Skipped tickers (recent data): {results['skipped_tickers']}", level="INFO")
+                    
+                    if results['failed_fetches']:
+                        logger.log("Main", f"Failed tickers: {results['failed_fetches']}", level="WARNING")
                 
-                api_calls_saved = results['total_skipped'] * 4  # 4 endpoints per ticker
-                print(f"  API calls saved: {api_calls_saved}")
+                # Step 3: Process staged data for database insertion
+                staged_data = data_manager.get_staged_data()
+                print(f"\n[INFO] {len(staged_data)} tickers staged for database insertion")
                 
-                # Log detailed results
-                if results['successful_fetches']:
-                    logger.log("Main", f"Successfully fetched: {results['successful_fetches']}", level="INFO")
-                
-                if results['skipped_tickers']:
-                    logger.log("Main", f"Skipped tickers (recent data): {results['skipped_tickers']}", level="INFO")
-                
-                if results['failed_fetches']:
-                    logger.log("Main", f"Failed tickers: {results['failed_fetches']}", level="WARNING")
-            
-            # Step 3: Process staged data for database insertion
-            staged_data = data_manager.get_staged_data()
-            print(f"\n[INFO] {len(staged_data)} tickers staged for database insertion")
-            
-            if staged_data:
-                # Check if we have enough time for database operations
-                # Ensure minimum estimate of 0.1 minutes to avoid edge cases
-                estimated_db_time = max(0.1, len(staged_data) * 0.5)  # Estimate 0.5 minutes per ticker
-                if not check_timeout_safety(start_time, timeout_minutes, "database insertion", estimated_db_time):
-                    logger.log("Main", "Skipping database insertion due to timeout risk", level="WARNING")
-                    print("\n[WARNING] Staged data will remain in cache for next run")
-                    # Still show cache status before returning
-                    cache_status = data_manager.get_staging_cache_status()
-                    print(f"\n[INFO] Staging cache status:")
-                    print(f"  Entries preserved: {cache_status['size']}")
-                    print(f"  Oldest entry age: {cache_status['oldest_entry_age_hours']:.1f} hours")
-                    return
-                
-                # Log what we're about to insert
-                for ticker in staged_data:
-                    ticker_data = staged_data[ticker]
+                if staged_data:
+                    # Check if we have enough time for database operations
+                    # Ensure minimum estimate of 0.1 minutes to avoid edge cases
+                    estimated_db_time = max(0.1, len(staged_data) * 0.5)  # Estimate 0.5 minutes per ticker
+                    if not check_timeout_safety(start_time, timeout_minutes, "database insertion", estimated_db_time):
+                        logger.log("Main", "Skipping database insertion due to timeout risk", level="WARNING")
+                        print("\n[WARNING] Staged data will remain in cache for next run")
+                        # Still show cache status before returning
+                        cache_status = data_manager.get_staging_cache_status()
+                        print(f"\n[INFO] Staging cache status:")
+                        print(f"  Entries preserved: {cache_status['size']}")
+                        print(f"  Oldest entry age: {cache_status['oldest_entry_age_hours']:.1f} hours")
+                        return
+                    
+                    # Log what we're about to insert
+                    for ticker in staged_data:
+                        ticker_data = staged_data[ticker]
+                        logger.log("Main", 
+                                  f"{ticker}: Ready to insert with {len(ticker_data['fundamentals'])} fields", 
+                                  level="INFO")
+                    
+                    # Step 4: Insert data into database using DataInserter with existing connection
+                    print(f"\n[INFO] Starting database insertion...")
+                    with DataInserter(logger, connection=db.conn) as inserter:
+                        # Insert all staged data
+                        insert_results = inserter.insert_staged_data(staged_data, use_transaction=use_transaction)
+                        
+                        # Report insertion results
+                        print(f"\n[INFO] Database Insertion Results:")
+                        print(f"  Successful inserts: {len(insert_results['successful_inserts'])}")
+                        print(f"  Failed inserts: {len(insert_results['failed_inserts'])}")
+                        
+                        # Log successful insertions
+                        if insert_results['successful_inserts']:
+                            logger.log("Main", 
+                                      f"Successfully inserted: {insert_results['successful_inserts']}", 
+                                      level="INFO")
+                            print(f"  Tickers inserted: {', '.join(insert_results['successful_inserts'])}")
+                        
+                        # Log and display failed insertions
+                        if insert_results['failed_inserts']:
+                            logger.log("Main", 
+                                      f"Failed insertions: {insert_results['failed_inserts']}", 
+                                      level="ERROR")
+                            print("\n[ERROR] Failed insertions:")
+                            for failure in insert_results['failed_inserts']:
+                                print(f"  - {failure['ticker']}: {failure['error']}")
+                        
+                        # Clear staging cache for successfully inserted tickers
+                        for ticker in insert_results['successful_inserts']:
+                            data_manager.clear_staged_data(ticker)
+                            logger.log("Main", 
+                                      f"{ticker}: Cleared from staging cache after successful insertion", 
+                                      level="INFO")
+                        
+                    # Final summary
+                    total_success = len(insert_results['successful_inserts'])
+                    total_failed = len(insert_results['failed_inserts'])
+                    
                     logger.log("Main", 
-                              f"{ticker}: Ready to insert with {len(ticker_data['fundamentals'])} fields", 
+                              f"Session complete: {total_success} tickers inserted, {total_failed} failed", 
                               level="INFO")
-                
-                # Step 4: Insert data into database using DataInserter with existing connection
-                print(f"\n[INFO] Starting database insertion...")
-                with DataInserter(logger, connection=db.conn) as inserter:
-                    # Insert all staged data
-                    insert_results = inserter.insert_staged_data(staged_data, use_transaction=use_transaction)
+                    print(f"\n[INFO] Session complete: {total_success} tickers successfully processed end-to-end")
                     
-                    # Report insertion results
-                    print(f"\n[INFO] Database Insertion Results:")
-                    print(f"  Successful inserts: {len(insert_results['successful_inserts'])}")
-                    print(f"  Failed inserts: {len(insert_results['failed_inserts'])}")
-                    
-                    # Log successful insertions
-                    if insert_results['successful_inserts']:
-                        logger.log("Main", 
-                                  f"Successfully inserted: {insert_results['successful_inserts']}", 
-                                  level="INFO")
-                        print(f"  Tickers inserted: {', '.join(insert_results['successful_inserts'])}")
-                    
-                    # Log and display failed insertions
-                    if insert_results['failed_inserts']:
-                        logger.log("Main", 
-                                  f"Failed insertions: {insert_results['failed_inserts']}", 
-                                  level="ERROR")
-                        print("\n[ERROR] Failed insertions:")
-                        for failure in insert_results['failed_inserts']:
-                            print(f"  - {failure['ticker']}: {failure['error']}")
-                    
-                    # Clear staging cache for successfully inserted tickers
-                    for ticker in insert_results['successful_inserts']:
-                        data_manager.clear_staged_data(ticker)
-                        logger.log("Main", 
-                                  f"{ticker}: Cleared from staging cache after successful insertion", 
-                                  level="INFO")
+                else:
+                    print("\n[INFO] No new data to insert - all tickers have recent data")
+                    logger.log("Main", "Session complete: No new data fetched (all tickers current)", level="INFO")
                 
-                # Final summary
-                total_success = len(insert_results['successful_inserts'])
-                total_failed = len(insert_results['failed_inserts'])
-                
-                logger.log("Main", 
-                          f"Session complete: {total_success} tickers inserted, {total_failed} failed", 
-                          level="INFO")
-                print(f"\n[INFO] Session complete: {total_success} tickers successfully processed end-to-end")
-                
-            else:
-                print("\n[INFO] No new data to insert - all tickers have recent data")
-                logger.log("Main", "Session complete: No new data fetched (all tickers current)", level="INFO")
-            
-            # Display cache status at the end
-            cache_status = data_manager.get_staging_cache_status()
-            print(f"\n[INFO] Final staging cache status:")
-            print(f"  Remaining entries: {cache_status['size']}")
-            if cache_status['size'] > 0:
-                print(f"  Oldest entry age: {cache_status['oldest_entry_age_hours']:.1f} hours")
-                print(f"  (These entries failed insertion and remain in cache)")
+                # Display cache status at the end
+                cache_status = data_manager.get_staging_cache_status()
+                print(f"\n[INFO] Final staging cache status:")
+                print(f"  Remaining entries: {cache_status['size']}")
+                if cache_status['size'] > 0:
+                    print(f"  Oldest entry age: {cache_status['oldest_entry_age_hours']:.1f} hours")
+                    print(f"  (These entries failed insertion and remain in cache)")
 
 if __name__ == "__main__":
     args = parse_arguments()
