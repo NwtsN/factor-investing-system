@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS stocks (
     stock_id INTEGER PRIMARY KEY AUTOINCREMENT,
     ticker VARCHAR UNIQUE NOT NULL,
     company_name TEXT NOT NULL,
+    description TEXT, 
     industry TEXT,
     sector TEXT,
     country TEXT
