@@ -65,9 +65,9 @@ class DataFetcher:
         self.max_backoff: float = 300.0  # 5 minutes max
         
         # Data quality thresholds
-        self.min_required_fields = 10  # Requires ~59% of 17 fields (was 6 when we had fewer fields)
+        self.min_required_fields = 10  # Requires ~45% of 22 fields (17 financial + 5 company fields)
         # This ensures core metrics are present: balance sheet (3-4), profitability (2-3), 
-        # cash flow (1-2), and EPS data. Still allows for some missing TTM calculations.
+        # cash flow (1-2), EPS data, and company information (2-3 minimum).
         
     def _setup_session(self) -> None:
         """Configure HTTP session with retry strategy and connection pooling."""
