@@ -188,6 +188,7 @@ class DataFetcher:
             "BALANCE_SHEET": f"https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol={ticker}&apikey={used_api_key}",
             "CASH_FLOW": f"https://www.alphavantage.co/query?function=CASH_FLOW&symbol={ticker}&apikey={used_api_key}",
             "Earnings": f"https://www.alphavantage.co/query?function=EARNINGS&symbol={ticker}&apikey={used_api_key}",
+            "COMPANY_OVERVIEW": f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={ticker}&apikey={used_api_key}",
         }
 
         raw_data = {}
@@ -389,6 +390,9 @@ class DataFetcher:
         elif endpoint_type == "Earnings":
             return ("quarterlyEarnings" in json_data and 
                     len(json_data.get("quarterlyEarnings", [])) >= 5)
+        elif endpoint_type == "COMPANY_OVERVIEW":
+            return ("Symbol" in json_data and 
+                    "Name" in json_data)
         
         return True
 
@@ -541,6 +545,24 @@ class DataFetcher:
             "ebitda_annual": safe_get(income_a, 0, "ebitda") if np.isnan(get_rolling_4q_sum(income_q, "ebitda")) else np.nan,
             "total_debt_annual": safe_get(balance_a, 0, "totalLiabilities") if np.isnan(safe_get(balance_q, 0, "totalLiabilities")) else np.nan
         }
+        
+        # Add company overview data if available
+        if "COMPANY_OVERVIEW" in raw_data:
+            overview = raw_data["COMPANY_OVERVIEW"]
+            fundamentals['company_name'] = overview.get('Name', ticker)
+            # Safely handle description - convert None to empty string before slicing
+            description = overview.get('Description', '')
+            fundamentals['description'] = (description if description else '')[:5000]  # Limit to 5000 chars
+            fundamentals['industry'] = overview.get('Industry', '')
+            fundamentals['sector'] = overview.get('Sector', '')
+            fundamentals['country'] = overview.get('Country', '')
+        else:
+            # Fallback values if company overview is not available
+            fundamentals['company_name'] = ticker
+            fundamentals['description'] = ''
+            fundamentals['industry'] = ''
+            fundamentals['sector'] = ''
+            fundamentals['country'] = ''
 
         return fundamentals
     
