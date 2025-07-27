@@ -120,11 +120,20 @@ class DataInserter:
                     if 'fundamentals' not in data or 'raw_data' not in data:
                         raise ValueError(f"Missing required fields for {ticker}: need 'fundamentals' and 'raw_data'")
                     
-                    # Get or create stock_id
-                    stock_id = self._get_or_create_stock_id(ticker)
-                    
-                    # Insert fundamental data
+                    # Extract company data from fundamentals
                     fundamentals = data['fundamentals']
+                    company_data = {
+                        'company_name': fundamentals.get('company_name'),
+                        'description': fundamentals.get('description'),
+                        'industry': fundamentals.get('industry'),
+                        'sector': fundamentals.get('sector'),
+                        'country': fundamentals.get('country')
+                    }
+                    
+                    # Get or create stock_id with company data
+                    stock_id = self._get_or_create_stock_id(ticker, company_data)
+                    
+                    # Continue with fundamental data insertion
                     raw_api_data = data['raw_data']
                     
                     # Insert extracted fundamental data
@@ -175,8 +184,15 @@ class DataInserter:
         
         return results
     
-    def _get_or_create_stock_id(self, ticker: str) -> int:
-        """Get stock_id for ticker, creating stock record if necessary."""
+    def _get_or_create_stock_id(self, ticker: str, company_data: dict = None) -> int:
+        """
+        Get stock_id for ticker, creating stock record if necessary.
+        Now also handles company information.
+        
+        Args:
+            ticker: Stock ticker symbol
+            company_data: Optional dict with company_name, description, industry, sector, country
+        """
         # Validate ticker format (alphanumeric and common symbols only)
         if not ticker or not ticker.replace('.', '').replace('-', '').isalnum():
             raise ValueError(f"Invalid ticker format: {ticker}")
@@ -190,17 +206,51 @@ class DataInserter:
         result = self.cursor.fetchone()
         
         if result:
-            return result[0]
+            stock_id = result[0]
+            
+            # Update company information if provided and not just placeholder data
+            if company_data and company_data.get('company_name') != ticker:
+                self._update_stock_info(stock_id, ticker, company_data)
+            
+            return stock_id
         
-        # Create new stock record
+        # Create new stock record with company information
         try:
+            # Extract company data or use defaults
+            company_name = ticker  # Default
+            description = ''
+            industry = ''
+            sector = ''
+            country = ''
+            
+            if company_data:
+                company_name = company_data.get('company_name', ticker)
+                # Safely handle None values
+                desc = company_data.get('description', '')
+                description = (desc if desc else '')[:5000]  # Limit description length
+                industry = company_data.get('industry', '') or ''
+                sector = company_data.get('sector', '') or ''
+                country = company_data.get('country', '') or ''
+            
             self.cursor.execute(
-                "INSERT INTO stocks (ticker, company_name) VALUES (?, ?)",
-                (ticker, ticker)  # Using ticker as company name for now
+                """INSERT INTO stocks (ticker, company_name, description, industry, sector, country) 
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (ticker, company_name, description, industry, sector, country)
             )
             stock_id = self.cursor.lastrowid
-            self.logger.log("DataInserter", f"Created new stock record for {ticker} with ID {stock_id}", level="INFO")
+            
+            # Log with company name if available
+            if company_name != ticker:
+                self.logger.log("DataInserter", 
+                              f"Created new stock record for {ticker} ({company_name}) with ID {stock_id}", 
+                              level="INFO")
+            else:
+                self.logger.log("DataInserter", 
+                              f"Created new stock record for {ticker} with ID {stock_id}", 
+                              level="INFO")
+            
             return stock_id
+            
         except sqlite3.IntegrityError as e:
             # Handle race condition where another process created the record
             self.logger.log("DataInserter", f"Stock creation race condition for {ticker}, retrying: {e}", level="WARNING")
@@ -209,6 +259,100 @@ class DataInserter:
             if result:
                 return result[0]
             raise
+    
+    def _update_stock_info(self, stock_id: int, ticker: str, company_data: dict) -> None:
+        """
+        Update stock information with company overview data.
+        Only updates if new data is more complete than existing data.
+        
+        Args:
+            stock_id: The stock_id to update
+            ticker: Ticker symbol for logging
+            company_data: Dict with company information
+        """
+        try:
+            # First, check what data currently exists
+            self.cursor.execute(
+                """SELECT company_name, description, industry, sector, country 
+                   FROM stocks WHERE stock_id = ?""",
+                (stock_id,)
+            )
+            existing = self.cursor.fetchone()
+            
+            if existing:
+                existing_name, existing_desc, existing_industry, existing_sector, existing_country = existing
+                
+                # Only update if we have better data
+                # (not just the ticker as company_name and not empty/null values)
+                needs_update = False
+                
+                new_name = company_data.get('company_name', '')
+                new_desc = company_data.get('description', '')
+                new_industry = company_data.get('industry', '')
+                new_sector = company_data.get('sector', '')
+                new_country = company_data.get('country', '')
+                
+                # Check if new data is better than existing data
+                if new_name and new_name != ticker and (not existing_name or existing_name == ticker):
+                    needs_update = True
+                if new_desc and (not existing_desc or existing_desc == ''):
+                    needs_update = True
+                if new_industry and (not existing_industry or existing_industry == ''):
+                    needs_update = True
+                if new_sector and (not existing_sector or existing_sector == ''):
+                    needs_update = True
+                if new_country and (not existing_country or existing_country == ''):
+                    needs_update = True
+                
+                if needs_update:
+                    # Build update query dynamically based on what needs updating
+                    update_fields = []
+                    update_values = []
+                    
+                    if new_name and new_name != ticker:
+                        update_fields.append("company_name = ?")
+                        update_values.append(new_name)
+                    
+                    if new_desc:
+                        update_fields.append("description = ?")
+                        update_values.append(new_desc[:5000])  # Limit description length
+                    
+                    if new_industry:
+                        update_fields.append("industry = ?")
+                        update_values.append(new_industry)
+                    
+                    if new_sector:
+                        update_fields.append("sector = ?")
+                        update_values.append(new_sector)
+                    
+                    if new_country:
+                        update_fields.append("country = ?")
+                        update_values.append(new_country)
+                    
+                    if update_fields:
+                        update_values.append(stock_id)
+                        query = f"UPDATE stocks SET {', '.join(update_fields)} WHERE stock_id = ?"
+                        
+                        self.cursor.execute(query, update_values)
+                        
+                        if self.cursor.rowcount > 0:
+                            self.logger.log("DataInserter", 
+                                           f"Updated company information for {ticker} (stock_id: {stock_id})", 
+                                           level="INFO")
+                    else:
+                        self.logger.log("DataInserter", 
+                                       f"No updates needed for {ticker} - existing data is complete", 
+                                       level="DEBUG")
+                else:
+                    self.logger.log("DataInserter", 
+                                   f"Skipping update for {ticker} - existing data is already complete", 
+                                   level="DEBUG")
+                    
+        except Exception as e:
+            self.logger.log("DataInserter", 
+                           f"Failed to update company information for {ticker}: {e}", 
+                           level="WARNING")
+            # Don't raise - this is not critical enough to fail the entire insertion
     
     def _insert_extracted_fundamental_data(self, stock_id: int, fundamentals: dict, fetch_timestamp: Optional[datetime]) -> None:
         """Insert extracted fundamental data."""
