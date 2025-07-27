@@ -275,6 +275,8 @@ class DataFetcher:
                 # For lists like eps_last_5_qs, count as valid if non-empty
                 if value:
                     non_nan_fields += 1
+            elif isinstance(value, str) and not value.strip():
+                continue  # Don't count empty strings as valid
             elif not (isinstance(value, float) and np.isnan(value)):
                 non_nan_fields += 1
         
@@ -556,6 +558,12 @@ class DataFetcher:
             fundamentals['industry'] = overview.get('Industry', '')
             fundamentals['sector'] = overview.get('Sector', '')
             fundamentals['country'] = overview.get('Country', '')
+            
+            # Log successful company info extraction if we got a real company name
+            if fundamentals['company_name'] != ticker:
+                self.logger.log("CompanyInfo", 
+                              f"{ticker}: Extracted company info - {fundamentals['company_name']} ({fundamentals['sector']})", 
+                              level="INFO")
         else:
             # Fallback values if company overview is not available
             fundamentals['company_name'] = ticker
@@ -563,6 +571,9 @@ class DataFetcher:
             fundamentals['industry'] = ''
             fundamentals['sector'] = ''
             fundamentals['country'] = ''
+            self.logger.log("CompanyInfo", 
+                          f"{ticker}: No company overview data available, using defaults", 
+                          level="DEBUG")
 
         return fundamentals
     
