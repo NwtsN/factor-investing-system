@@ -1,6 +1,9 @@
 # Sensitive configuration files
 config/invsys_environment.yml
 
+# redundant planning files
+docs/planning/READMEs
+
 # Database files
 data/*.db
 data/*.sqlite
