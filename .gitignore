@@ -2,7 +2,7 @@
 config/invsys_environment.yml
 
 # redundant planning files
-docs/planning/READMEs/
+docs/READMEs/
 
 # Database files
 data/*.db
