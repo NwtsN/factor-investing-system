@@ -91,11 +91,13 @@ invsys/
 ├── src/
 │   ├── main.py                  # Entry point with CLI argument parsing
 │   ├── config.py                # Centralized configuration
+│   ├── data_collection/
+│   │   ├── fetch_data.py        # API data fetching & processing
+│   │   └── fetch_prices.py      # Price data fetching
 │   ├── database/
 │   │   ├── database_setup.py    # Database initialization & schema
 │   │   ├── database_handler.py  # Data freshness & staging management
-│   │   ├── data_inserter.py     # Database insertion with transaction support
-│   │   └── fetch_data.py        # API data fetching & processing
+│   │   └── data_inserter.py     # Database insertion with transaction support
 │   ├── utils/
 │   │   ├── logging.py           # Database & console logging
 │   │   └── program_timer.py     # Timeout functionality
@@ -120,7 +122,7 @@ main.py → DataManager → DataFetcher → API calls → Parse data → Stage �
 
 ### Core Components
 
-#### **DataFetcher** (`fetch_data.py`)
+#### **DataFetcher** (`data_collection/fetch_data.py`)
 - Handles all Alpha Vantage API interactions
 - Implements intelligent rate limiting (12 seconds between calls)
 - Exponential backoff for rate limit errors (up to 5 minutes)

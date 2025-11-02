@@ -20,7 +20,7 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 
 ## 🔧 **Components**
 
-### **1. DataFetcher** (`fetch_data.py`)
+### **1. DataFetcher** (`data_collection/fetch_data.py`)
 **Primary responsibility**: Fetch and parse financial data from Alpha Vantage API
 
 **Key Features:**
@@ -107,7 +107,7 @@ The database module provides a complete, intelligent pipeline for fetching, vali
 ```python
 from database.database_setup import DatabaseManager
 from database.database_handler import DataManager
-from database.fetch_data import DataFetcher
+from data_collection.fetch_data import DataFetcher
 from database.data_inserter import DataInserter
 
 # Initialize database with context manager
@@ -427,11 +427,15 @@ GNU Affero General Public License v3.0 - See LICENSE file for details.
 ## 📁 **File Structure**
 
 ```
-src/database/
-├── __init__.py            # Module initialization
-├── database_setup.py      # Database initialization and schema management
-├── database_handler.py    # DataManager class for freshness and staging
-├── fetch_data.py          # DataFetcher class for API data retrieval
-├── data_inserter.py       # DataInserter class for database insertion
-└── README.md             # This documentation
+src/
+├── data_collection/
+│   ├── __init__.py        # Module initialization
+│   ├── fetch_data.py      # DataFetcher class for API data retrieval
+│   └── fetch_prices.py    # Price data fetching (future)
+└── database/
+    ├── __init__.py            # Module initialization
+    ├── database_setup.py      # Database initialization and schema management
+    ├── database_handler.py    # DataManager class for freshness and staging
+    ├── data_inserter.py       # DataInserter class for database insertion
+    └── README.md             # This documentation
 ``` 
