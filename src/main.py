@@ -32,7 +32,7 @@ from typing import Optional
 sys.path.append(os.path.join(os.path.dirname(__file__)))
 
 from database.database_setup import DatabaseManager
-from database.fetch_data import DataFetcher
+from data_collection.fetch_data import DataFetcher
 from database.database_handler import DataManager
 from database.data_inserter import DataInserter
 from utils.program_timer import Timeout
